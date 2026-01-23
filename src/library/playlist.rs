@@ -5,6 +5,8 @@ use anyhow::Result;
 
 use crate::library::store::StoreManager;
 
+use crate::utils::APP_NAME;
+
 
 pub fn handle_set_path(path_str: String, store: &StoreManager) -> Result<()> {
     let path = std::path::PathBuf::from(&path_str);
@@ -26,7 +28,7 @@ pub fn handle_set_path(path_str: String, store: &StoreManager) -> Result<()> {
 pub fn handle_playlist(store: &StoreManager) -> Result<()> {
     let state = store.load()?;
     if state.library.is_empty() {
-        anyhow::bail!("Library is empty. Run 'music-cli refresh' or set a path.");
+        anyhow::bail!("Library is empty. Run '{} refresh' or set a path.", APP_NAME);
     }
     let songs_to_play: Vec<crate::models::Song> = state.library;
 
@@ -48,7 +50,9 @@ pub fn handle_playlist(store: &StoreManager) -> Result<()> {
 pub fn handle_refresh(store: &StoreManager) -> Result<()> {
     let mut state = store.load()?;
     let root = state.config.root_path.as_ref()
-        .context("No music path set. Run 'music-cli path <DIR>' first.")?;
+        .with_context(|| {
+            format!("No music path set. Run '{} path <DIR>' first.", APP_NAME)
+        })?;
 
     println!("Scanning {:?}...", root);
 

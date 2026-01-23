@@ -1,8 +1,10 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+use crate::utils::APP_NAME;
+
 #[derive(Parser)]
-#[command(name = "music-cli")]
+#[command(name = APP_NAME)]
 #[command(about = "Lightweight terminal music player", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
