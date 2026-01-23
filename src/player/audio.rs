@@ -8,56 +8,75 @@ use crossterm::{
     terminal::{self, ClearType},
     ExecutableCommand,
 };
+use anyhow::{Result, Context};
 
-pub fn play_file(path: std::path::PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+use crate::models::Song;
+
+pub fn play_file(path: std::path::PathBuf) -> Result<()> {
     if !path.exists() {
-        return Err(format!("File not found: {}", path.display()).into());
+        anyhow::bail!("File not found: {}", path.display());
     }
 
     if !path.is_file() {
-        return Err(format!("Path is not a file: {}", path.display()).into());
+        anyhow::bail!("Path is not a file: {}", path.display());
     }
+
+    let song = Song {
+        path: path.clone(),
+        title: path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Unknown")
+            .to_string(),
+    };
+
+    play_song(&song)
+}
+
+fn play_song(song: &Song) -> Result<()> {
+    println!("Now playing: {}", song.title);
 
     let (_stream, stream_handle) = OutputStream::try_default()?;
     let sink = Sink::try_new(&stream_handle)?;
 
-    let file = File::open(&path)?;
-    let source = Decoder::new(BufReader::new(file)).map_err(|e| {
-        format!("Error decoding audio file {}: {}", path.display(), e)
-    })?;
+    let file = File::open(&song.path)?;
+
+    let source = Decoder::new(BufReader::new(file))
+        .with_context(|| format!("Failed to decode audio file: {}", song.path.display()))?;
 
     sink.append(source);
 
     // Enable raw mode for keyboard input
     terminal::enable_raw_mode()?;
 
-    let result = player_loop(&sink);
+    let result = player_loop(&sink, &song.title);
 
-    // Cleanup: disable raw mode
+    // Disable raw mode
     terminal::disable_raw_mode()?;
-    println!("\nPlayback ended");
+    println!("\n✓ Playback ended");
 
     result
 }
 
-fn print_status(is_paused: bool) {
+
+fn print_status(is_paused: bool, current_info: &str) {
     let mut stdout = stdout();
     stdout.execute(terminal::Clear(ClearType::CurrentLine)).ok();
-    print!("\r{} ", if is_paused { "⏸ Paused " } else { "▶ Playing" });
+    print!("\r{} | {} | [Space/P/K: Pause/Play | Q/Esc: Quit]",
+           if is_paused { "⏸ Paused " } else { "▶ Playing" },
+           current_info);
     stdout.flush().ok();
 }
 
 // TODO Change the key handling
-fn player_loop(sink: &Sink) -> Result<(), Box<dyn std::error::Error>> {
+fn player_loop(sink: &Sink, title: &str) -> Result<()> {
     let mut is_paused = false;
-    print_status(is_paused);
+    print_status(is_paused, title);
 
     loop {
         // Check if playback has ended
         if sink.empty() {
             break;
         }
-
         // Poll for keyboard events with timeout
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(KeyEvent { code, .. }) = event::read()? {
@@ -71,7 +90,7 @@ fn player_loop(sink: &Sink) -> Result<(), Box<dyn std::error::Error>> {
                             sink.pause();
                             is_paused = true;
                         }
-                        print_status(is_paused);
+                        print_status(is_paused, title);
                     }
                     KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
                         println!("\nQuitting...");
