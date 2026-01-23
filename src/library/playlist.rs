@@ -68,22 +68,26 @@ fn scan_directory(root: &std::path::Path) -> Result<Vec<crate::models::Song>> {
     for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
         if path.is_file() {
-            if let Some(ext) = path.extension() {
-                let ext_str = ext.to_string_lossy().to_lowercase();
-                if ext_str == "mp3" || ext_str == "flac" || ext_str == "wav" {
-                    let song = crate::models::Song {
-                        path: path.to_path_buf(),
-                        title: path.file_stem()
-                            .unwrap()
-                            .to_string_lossy()
-                            .to_string(),
-                        // TODO Add metadata
-                    };
-                    songs.push(song);
-                }
+            if is_audio_file(path) {
+                let song = crate::models::Song {
+                    path: path.to_path_buf(),
+                    title: path.file_stem()
+                        .unwrap()
+                        .to_string_lossy()
+                        .to_string(),
+                    // TODO Add metadata
+                };
+                songs.push(song);
             }
         }
     }
 
     Ok(songs)
+}
+
+fn is_audio_file(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| crate::utils::SUPPORTED_EXTENSIONS.contains(&e.to_lowercase().as_str()))
+        .unwrap_or(false)
 }

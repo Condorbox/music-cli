@@ -2,6 +2,7 @@ mod cli;
 mod player;
 mod models;
 mod library;
+mod utils;
 
 use cli::{Cli, Commands};
 use clap::Parser;
