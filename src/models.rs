@@ -10,6 +10,10 @@ pub struct AppConfig {
 pub struct Song {
     pub path: PathBuf,
     pub title: String,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub track_number: Option<u32>,
+    pub duration: Option<u64>, // Duration in seconds
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]

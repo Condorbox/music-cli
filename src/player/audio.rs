@@ -30,11 +30,15 @@ pub fn play_file(path: std::path::PathBuf, ui: &mut impl Ui) -> Result<()> {
     }
 
     let song = Song {
-        path: path.clone(),
+        path: path.to_path_buf(),
         title: path.file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("Unknown")
             .to_string(),
+        artist: None,
+        album: None,
+        track_number: None,
+        duration: None,
     };
 
     play_song(&song, ui)

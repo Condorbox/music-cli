@@ -5,4 +5,5 @@ pub trait Ui {
     fn clear_status(&mut self);
 
     fn print_message(&mut self, message: &str);
+    fn print_error(&mut self, message: &str);
 }

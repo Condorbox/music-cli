@@ -2,13 +2,15 @@ use std::fs;
 use anyhow::Context;
 use walkdir::WalkDir;
 use anyhow::Result;
+use lofty::file::{AudioFile, TaggedFileExt};
+use lofty::probe::Probe;
+use lofty::tag::Accessor;
 
 use crate::library::store::StoreManager;
 use crate::models::Song;
 use crate::utils::APP_NAME;
 
 use crate::player::audio;
-use crate::ui::terminal::TerminalUi;
 use crate::ui::Ui;
 
 pub fn handle_set_path(path_str: String, store: &StoreManager, ui: &mut impl Ui) -> Result<()> {
@@ -48,7 +50,7 @@ pub fn handle_refresh(store: &StoreManager, ui: &mut impl Ui) -> Result<()> {
 
     ui.print_message(&format!("Scanning {:?}...", root));
 
-    let new_library = scan_directory(root)?;
+    let new_library = scan_directory(root, ui)?;
     let count = new_library.len();
 
     state.library = new_library;
@@ -58,7 +60,7 @@ pub fn handle_refresh(store: &StoreManager, ui: &mut impl Ui) -> Result<()> {
     Ok(())
 }
 
-pub fn handle_list(store: &StoreManager, ui: &mut TerminalUi) -> Result<()> {
+pub fn handle_list(store: &StoreManager,ui: &mut impl Ui) -> Result<()> {
     let state = store.load()?;
 
     let songs: Vec<Song> = state.library;
@@ -76,7 +78,7 @@ pub fn handle_list(store: &StoreManager, ui: &mut TerminalUi) -> Result<()> {
 }
 
 // TODO Maybe also select by title
-pub fn handle_select(index: usize, store: &StoreManager, ui: &mut TerminalUi) -> Result<()> {
+pub fn handle_select(index: usize, store: &StoreManager, ui: &mut impl Ui) -> Result<()> {
     let state = store.load()?;
 
     if state.library.is_empty() {
@@ -98,28 +100,79 @@ pub fn handle_select(index: usize, store: &StoreManager, ui: &mut TerminalUi) ->
     Ok(())
 }
 
-fn scan_directory(root: &std::path::Path) -> Result<Vec<Song>> {
+fn scan_directory(root: &std::path::Path, ui: &mut impl Ui) -> Result<Vec<Song>> {
     let mut songs = Vec::new();
 
     for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
-        if path.is_file() {
-            if is_audio_file(path) {
-                let song = Song {
-                    path: path.to_path_buf(),
-                    title: path.file_stem()
-                        .unwrap()
-                        .to_string_lossy()
-                        .to_string(),
-                    // TODO Add metadata
-                };
-                songs.push(song);
+        if path.is_file() && is_audio_file(path){
+            match extract_song_metadata(path) {
+                Ok(song ) => songs.push(song),
+                Err(e) => {
+                    ui.print_error(&format!("Warning: Failed to read metadata for {:?}: {}", path, e));
+
+                    // Fallback to basic file info
+                    songs.push(Song {
+                        path: path.to_path_buf(),
+                        title: path.file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("Unknown")
+                            .to_string(),
+                        artist: None,
+                        album: None,
+                        track_number: None,
+                        duration: None,
+                    });
+
+                }
             }
         }
     }
 
     Ok(songs)
 }
+
+fn extract_song_metadata(path: &std::path::Path) -> Result<Song> {
+    let tagged_file = Probe::open(path)
+        .context("Failed to open audio file")?
+        .read()
+        .context("Failed to read audio file")?;
+
+    // Get the primary tag (ID3v2 for MP3, Vorbis for FLAC/OGG, etc.)
+    let tag = tagged_file.primary_tag().or_else(|| tagged_file.first_tag());
+
+    let title = tag
+        .and_then(|t| t.title().map(|s| s.to_string()))
+        .unwrap_or_else(|| {
+            // Fallback to filename if no title tag
+            path.file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string()
+        });
+
+    let artist = tag.and_then(|t| t.artist().map(|s| s.to_string()));
+
+    let album = tag.and_then(|t| t.album().map(|s| s.to_string()));
+
+    let track_number = tag.and_then(|t| t.track());
+
+    // Get duration from audio properties
+    let duration = tagged_file
+        .properties()
+        .duration()
+        .as_secs();
+
+    Ok(Song {
+        path: path.to_path_buf(),
+        title,
+        artist,
+        album,
+        track_number,
+        duration: Some(duration),
+    })
+}
+
 
 fn is_audio_file(path: &std::path::Path) -> bool {
     path.extension()

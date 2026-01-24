@@ -43,4 +43,8 @@ impl Ui for TerminalUi {
         self.clear_status();
         println!("{}", message);
     }
+
+    fn print_error(&mut self, message: &str) {
+        eprint!("{}", message);
+    }
 }
