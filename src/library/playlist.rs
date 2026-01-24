@@ -75,6 +75,29 @@ pub fn handle_list(store: &StoreManager, ui: &mut TerminalUi) -> Result<()> {
     Ok(())
 }
 
+// TODO Maybe also select by title
+pub fn handle_select(index: usize, store: &StoreManager, ui: &mut TerminalUi) -> Result<()> {
+    let state = store.load()?;
+
+    if state.library.is_empty() {
+        anyhow::bail!("Library is empty. Run '{} refresh' or set a path.", APP_NAME);
+    }
+
+    let song = state.library.get(index)
+        .with_context(|| {
+            format!(
+                "Invalid index {}. Library has {} songs (0-{}).",
+                index,
+                state.library.len(),
+                state.library.len() - 1
+            )
+        })?;
+
+    audio::play_song(song, ui)?;
+
+    Ok(())
+}
+
 fn scan_directory(root: &std::path::Path) -> Result<Vec<Song>> {
     let mut songs = Vec::new();
 

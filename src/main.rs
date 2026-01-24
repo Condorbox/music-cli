@@ -44,6 +44,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             playlist::handle_list(&store, &mut ui)?;
         }
 
+        Commands::Select { index } => {
+            playlist::handle_select(index, &store, &mut ui)?;
+        }
+
     }
 
     Ok(())

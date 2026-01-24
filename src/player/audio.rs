@@ -20,8 +20,6 @@ enum PlayerAction {
     Previous
 }
 
-
-
 pub fn play_file(path: std::path::PathBuf, ui: &mut impl Ui) -> Result<()> {
     if !path.exists() {
         anyhow::bail!("File not found: {}", path.display());
@@ -42,7 +40,7 @@ pub fn play_file(path: std::path::PathBuf, ui: &mut impl Ui) -> Result<()> {
     play_song(&song, ui)
 }
 
-fn play_song(song: &Song, ui: &mut impl Ui) -> Result<()> {
+pub fn play_song(song: &Song, ui: &mut impl Ui) -> Result<()> {
     ui.print_message(&format!("Now playing: {}", song.title));
 
     let (_stream, stream_handle) = OutputStream::try_default()?;
@@ -101,6 +99,7 @@ pub fn play_playlist(songs: Vec<Song>, ui: &mut impl Ui) -> Result<()> {
                 current_index += 1;
             }
             PlayerAction::Previous => {
+                // TODO Maybe if the song is less than x% go to the start of the song b
                 if current_index > 0 {
                     current_index -= 1;
                 }

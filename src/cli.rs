@@ -34,4 +34,9 @@ pub enum Commands {
     /// List song form the library from the configured path
     List,
 
+    /// Select a song from your library by index
+    Select {
+        /// Song index
+        index: usize,
+    },
 }
