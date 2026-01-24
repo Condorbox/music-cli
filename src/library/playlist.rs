@@ -7,6 +7,7 @@ use crate::library::store::StoreManager;
 
 use crate::utils::APP_NAME;
 
+use crate::player::audio;
 
 pub fn handle_set_path(path_str: String, store: &StoreManager) -> Result<()> {
     let path = std::path::PathBuf::from(&path_str);
@@ -30,19 +31,8 @@ pub fn handle_playlist(store: &StoreManager) -> Result<()> {
     if state.library.is_empty() {
         anyhow::bail!("Library is empty. Run '{} refresh' or set a path.", APP_NAME);
     }
-    let songs_to_play: Vec<crate::models::Song> = state.library;
 
-    if songs_to_play.is_empty() {
-        println!("No songs found to play.");
-        return Ok(());
-    }
-
-    // TODO: Play the songs
-    println!("Queueing {} songs...", songs_to_play.len());
-
-    for song in songs_to_play {
-        println!("{}", song.title);
-    }
+    audio::play_playlist(state.library).expect("Error playing the playlist");
 
     Ok(())
 }

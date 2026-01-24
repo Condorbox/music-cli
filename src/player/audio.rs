@@ -7,10 +7,18 @@ use crossterm::{
     event::{self, Event, KeyCode, KeyEvent},
     terminal::{self, ClearType},
     ExecutableCommand,
+    cursor
 };
 use anyhow::{Result, Context};
 
 use crate::models::Song;
+
+enum PlayerAction {
+    Finished,
+    Quit,
+}
+
+
 
 pub fn play_file(path: std::path::PathBuf) -> Result<()> {
     if !path.exists() {
@@ -45,39 +53,92 @@ fn play_song(song: &Song) -> Result<()> {
 
     sink.append(source);
 
-    // Enable raw mode for keyboard input
     terminal::enable_raw_mode()?;
 
-    let result = player_loop(&sink, &song.title);
+    let action = player_loop(&sink, &song.title)?;
 
-    // Disable raw mode
     terminal::disable_raw_mode()?;
-    println!("\n✓ Playback ended");
 
-    result
+    match action {
+        PlayerAction::Finished => println!("\n✓ Playback ended"),
+        PlayerAction::Quit => println!("\n✓ Playback stopped"),
+    }
+
+    Ok(())
 }
 
+pub fn play_playlist(songs: Vec<Song>) -> Result<()> {
+    if songs.is_empty() {
+        println!("No songs found to play.");
+        return Ok(());
+    }
 
+    println!("Queueing {} songs...\n", songs.len());
+
+    terminal::enable_raw_mode()?;
+
+    let (_stream, stream_handle) = OutputStream::try_default()?;
+    let sink = Sink::try_new(&stream_handle)?;
+
+    let total_songs = songs.len();
+
+    for (index, song) in songs.iter().enumerate() {
+        println!("\n[{}/{}] Now playing: {}", index + 1, total_songs, song.title);
+
+        let file = File::open(&song.path)?;
+        let source = Decoder::new(BufReader::new(file))
+            .with_context(|| format!("Failed to decode audio file: {}", song.path.display()))?;
+
+        sink.append(source);
+
+        match player_loop(&sink, &song.title)? {
+            PlayerAction::Finished => continue,
+            PlayerAction::Quit => {
+                terminal::disable_raw_mode()?;
+                println!("\n✓ Playback stopped");
+                return Ok(());
+            }
+        }
+    }
+
+    terminal::disable_raw_mode()?;
+    println!("\n✓ Playlist finished");
+
+    Ok(())
+}
+
+// TODO Refactor it
 fn print_status(is_paused: bool, current_info: &str) {
     let mut stdout = stdout();
+
+    // Move cursor to beginning of line and clear it
+    stdout.execute(cursor::MoveToColumn(0)).ok();
     stdout.execute(terminal::Clear(ClearType::CurrentLine)).ok();
-    print!("\r{} | {} | [Space/P/K: Pause/Play | Q/Esc: Quit]",
+
+    print!("{} | {} | [Space/P/K: Pause/Play | Q/Esc: Quit]",
            if is_paused { "⏸ Paused " } else { "▶ Playing" },
            current_info);
+
+    stdout.flush().ok();
+}
+
+fn clear_status_line() {
+    let mut stdout = stdout();
+    stdout.execute(cursor::MoveToColumn(0)).ok();
+    stdout.execute(terminal::Clear(ClearType::CurrentLine)).ok();
     stdout.flush().ok();
 }
 
 // TODO Change the key handling
-fn player_loop(sink: &Sink, title: &str) -> Result<()> {
+fn player_loop(sink: &Sink, title: &str) -> Result<PlayerAction> {
     let mut is_paused = false;
     print_status(is_paused, title);
 
     loop {
-        // Check if playback has ended
         if sink.empty() {
-            break;
+            return Ok(PlayerAction::Finished);
         }
-        // Poll for keyboard events with timeout
+
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(KeyEvent { code, .. }) = event::read()? {
                 match code {
@@ -93,14 +154,13 @@ fn player_loop(sink: &Sink, title: &str) -> Result<()> {
                         print_status(is_paused, title);
                     }
                     KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
+                        clear_status_line();
                         println!("\nQuitting...");
-                        break;
+                        return Ok(PlayerAction::Quit);
                     }
                     _ => {}
                 }
             }
         }
     }
-
-    Ok(())
 }
