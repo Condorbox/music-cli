@@ -28,7 +28,10 @@ pub enum Commands {
     /// Refresh the music library from the configured path
     Refresh,
 
-    /// Play songs from the library or a custom directory
+    /// Play songs from the library from the configured path
     Playlist,
+
+    /// List song form the library from the configured path
+    List,
 
 }

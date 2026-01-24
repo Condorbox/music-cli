@@ -4,10 +4,11 @@ use walkdir::WalkDir;
 use anyhow::Result;
 
 use crate::library::store::StoreManager;
-
+use crate::models::Song;
 use crate::utils::APP_NAME;
 
 use crate::player::audio;
+use crate::ui::terminal::TerminalUi;
 use crate::ui::Ui;
 
 pub fn handle_set_path(path_str: String, store: &StoreManager, ui: &mut impl Ui) -> Result<()> {
@@ -58,14 +59,31 @@ pub fn handle_refresh(store: &StoreManager, ui: &mut impl Ui) -> Result<()> {
     Ok(())
 }
 
-fn scan_directory(root: &std::path::Path) -> Result<Vec<crate::models::Song>> {
+pub fn handle_list(store: &StoreManager, ui: &mut TerminalUi) -> Result<()> {
+    let state = store.load()?;
+
+    let songs: Vec<Song> = state.library;
+    let total_songs = songs.len();
+
+    if songs.is_empty() {
+        anyhow::bail!("Library is empty. Run '{} refresh' or set a path.", APP_NAME);
+    }
+
+    for (index, song) in songs.iter().enumerate() {
+        ui.print_message(&format!("\n[{}/{}] {}", index + 1, total_songs, song.title));
+    }
+
+    Ok(())
+}
+
+fn scan_directory(root: &std::path::Path) -> Result<Vec<Song>> {
     let mut songs = Vec::new();
 
     for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
         if path.is_file() {
             if is_audio_file(path) {
-                let song = crate::models::Song {
+                let song = Song {
                     path: path.to_path_buf(),
                     title: path.file_stem()
                         .unwrap()

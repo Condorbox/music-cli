@@ -40,6 +40,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             playlist::handle_playlist(&store, &mut ui)?;
         }
 
+        Commands::List => {
+            playlist::handle_list(&store, &mut ui)?;
+        }
+
     }
 
     Ok(())
