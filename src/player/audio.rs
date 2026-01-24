@@ -16,6 +16,8 @@ use crate::ui::Ui;
 enum PlayerAction {
     Finished,
     Quit,
+    Next,
+    Previous
 }
 
 
@@ -60,8 +62,8 @@ fn play_song(song: &Song, ui: &mut impl Ui) -> Result<()> {
     terminal::disable_raw_mode()?;
 
     match action {
-        PlayerAction::Finished => ui.print_message("\n✓ Playback ended"),
-        PlayerAction::Quit => ui.print_message("\n✓ Playback stopped"),
+        PlayerAction::Finished | PlayerAction::Next | PlayerAction::Previous => ui.print_message("\n✓ Playback ended"),
+        PlayerAction::Quit  => ui.print_message("\n✓ Playback stopped"),
     }
 
     Ok(())
@@ -81,9 +83,12 @@ pub fn play_playlist(songs: Vec<Song>, ui: &mut impl Ui) -> Result<()> {
     let sink = Sink::try_new(&stream_handle)?;
 
     let total_songs = songs.len();
+    let mut current_index = 0;
 
-    for (index, song) in songs.iter().enumerate() {
-        ui.print_message(&format!("\n[{}/{}] Now playing: {}", index + 1, total_songs, song.title));
+    while current_index < total_songs {
+        let song = &songs[current_index];
+
+        ui.print_message(&format!("\n[{}/{}] Now playing: {}", current_index + 1, total_songs, song.title));
 
         let file = File::open(&song.path)?;
         let source = Decoder::new(BufReader::new(file))
@@ -92,7 +97,14 @@ pub fn play_playlist(songs: Vec<Song>, ui: &mut impl Ui) -> Result<()> {
         sink.append(source);
 
         match player_loop(&sink, &song.title, ui)? {
-            PlayerAction::Finished => continue,
+            PlayerAction::Finished | PlayerAction::Next => {
+                current_index += 1;
+            }
+            PlayerAction::Previous => {
+                if current_index > 0 {
+                    current_index -= 1;
+                }
+            }
             PlayerAction::Quit => {
                 terminal::disable_raw_mode()?;
                 ui.print_message("\n✓ Playback stopped");
@@ -120,6 +132,7 @@ fn player_loop(sink: &Sink, title: &str, ui: &mut impl Ui) -> Result<PlayerActio
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(KeyEvent { code, .. }) = event::read()? {
                 match code {
+                    // Pause/Resume
                     KeyCode::Char(' ') | KeyCode::Char('p') | KeyCode::Char('P') |
                     KeyCode::Char('k') | KeyCode::Char('K') => {
                         if is_paused {
@@ -131,6 +144,17 @@ fn player_loop(sink: &Sink, title: &str, ui: &mut impl Ui) -> Result<PlayerActio
                         }
                         ui.show_status(is_paused, title);
                     }
+                    // Next Song
+                    KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Right => {
+                        sink.stop();
+                        return Ok(PlayerAction::Next);
+                    }
+                    // Previous Song
+                    KeyCode::Char('b') | KeyCode::Char('B') | KeyCode::Left => {
+                        sink.stop();
+                        return Ok(PlayerAction::Previous);
+                    }
+                    // Quit
                     KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
                         ui.print_message("\nQuitting...");
                         return Ok(PlayerAction::Quit);

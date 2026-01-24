@@ -24,7 +24,7 @@ impl Ui for TerminalUi {
         stdout.execute(terminal::Clear(ClearType::CurrentLine)).ok();
 
         print!(
-            "{} | {} | [Space/P/K: Pause/Play | Q/Esc: Quit]",
+            "{} | {} | [Space/P/K: Pause/Play | Q/Esc: Quit | N/Right: Next | B/Left: Back]",
             if is_paused { "⏸ Paused " } else { "▶ Playing" },
             current_info
         );
