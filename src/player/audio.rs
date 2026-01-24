@@ -59,7 +59,7 @@ pub fn play_song(song: &Song, ui: &mut impl Ui) -> Result<()> {
 
     terminal::enable_raw_mode()?;
 
-    let action = player_loop(&sink, &song.title, ui)?;
+    let action = player_loop(&sink, &song, ui)?;
 
     terminal::disable_raw_mode()?;
 
@@ -98,7 +98,7 @@ pub fn play_playlist(songs: Vec<Song>, ui: &mut impl Ui) -> Result<()> {
 
         sink.append(source);
 
-        match player_loop(&sink, &song.title, ui)? {
+        match player_loop(&sink, &song, ui)? {
             PlayerAction::Finished | PlayerAction::Next => {
                 current_index += 1;
             }
@@ -123,9 +123,9 @@ pub fn play_playlist(songs: Vec<Song>, ui: &mut impl Ui) -> Result<()> {
 }
 
 // TODO Change the key handling
-fn player_loop(sink: &Sink, title: &str, ui: &mut impl Ui) -> Result<PlayerAction> {
+fn player_loop(sink: &Sink, song:  &Song, ui: &mut impl Ui) -> Result<PlayerAction> {
     let mut is_paused = false;
-    ui.show_status(is_paused, title);
+    ui.show_status(is_paused, song);
 
     loop {
         if sink.empty() {
@@ -145,7 +145,7 @@ fn player_loop(sink: &Sink, title: &str, ui: &mut impl Ui) -> Result<PlayerActio
                             sink.pause();
                             is_paused = true;
                         }
-                        ui.show_status(is_paused, title);
+                        ui.show_status(is_paused, song);
                     }
                     // Next Song
                     KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Right => {
