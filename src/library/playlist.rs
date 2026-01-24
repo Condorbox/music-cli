@@ -8,8 +8,9 @@ use crate::library::store::StoreManager;
 use crate::utils::APP_NAME;
 
 use crate::player::audio;
+use crate::ui::Ui;
 
-pub fn handle_set_path(path_str: String, store: &StoreManager) -> Result<()> {
+pub fn handle_set_path(path_str: String, store: &StoreManager, ui: &mut impl Ui) -> Result<()> {
     let path = std::path::PathBuf::from(&path_str);
 
     if !path.exists() || !path.is_dir() {
@@ -20,31 +21,32 @@ pub fn handle_set_path(path_str: String, store: &StoreManager) -> Result<()> {
     state.config.root_path = Some(fs::canonicalize(path)?); // Store absolute path
 
     store.save(&state)?;
-    println!("Music path updated to: {:?}", state.config.root_path);
+    ui.print_message(&format!("Music path updated to: {:?}", state.config.root_path));
+
     // TODO Create library
     Ok(())
 }
 
 // TODO Maybe add an optional customPath
-pub fn handle_playlist(store: &StoreManager) -> Result<()> {
+pub fn handle_playlist(store: &StoreManager, ui: &mut impl Ui) -> Result<()> {
     let state = store.load()?;
     if state.library.is_empty() {
         anyhow::bail!("Library is empty. Run '{} refresh' or set a path.", APP_NAME);
     }
 
-    audio::play_playlist(state.library).expect("Error playing the playlist");
+    audio::play_playlist(state.library, ui).expect("Error playing the playlist");
 
     Ok(())
 }
 
-pub fn handle_refresh(store: &StoreManager) -> Result<()> {
+pub fn handle_refresh(store: &StoreManager, ui: &mut impl Ui) -> Result<()> {
     let mut state = store.load()?;
     let root = state.config.root_path.as_ref()
         .with_context(|| {
             format!("No music path set. Run '{} path <DIR>' first.", APP_NAME)
         })?;
 
-    println!("Scanning {:?}...", root);
+    ui.print_message(&format!("Scanning {:?}...", root));
 
     let new_library = scan_directory(root)?;
     let count = new_library.len();
@@ -52,7 +54,7 @@ pub fn handle_refresh(store: &StoreManager) -> Result<()> {
     state.library = new_library;
     store.save(&state)?;
 
-    println!("Refresh complete. Found {} songs.", count);
+    ui.print_message(&format!("Refresh complete. Found {} songs.", count));
     Ok(())
 }
 

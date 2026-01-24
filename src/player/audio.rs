@@ -1,17 +1,17 @@
 
 use std::fs::File;
-use std::io::{stdout, Write, BufReader};
+use std::io::{BufReader};
 use std::time::Duration;
 use rodio::{Decoder, OutputStream, Sink};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent},
-    terminal::{self, ClearType},
-    ExecutableCommand,
-    cursor
+    terminal::{self},
 };
 use anyhow::{Result, Context};
 
 use crate::models::Song;
+
+use crate::ui::Ui;
 
 enum PlayerAction {
     Finished,
@@ -20,7 +20,7 @@ enum PlayerAction {
 
 
 
-pub fn play_file(path: std::path::PathBuf) -> Result<()> {
+pub fn play_file(path: std::path::PathBuf, ui: &mut impl Ui) -> Result<()> {
     if !path.exists() {
         anyhow::bail!("File not found: {}", path.display());
     }
@@ -37,11 +37,11 @@ pub fn play_file(path: std::path::PathBuf) -> Result<()> {
             .to_string(),
     };
 
-    play_song(&song)
+    play_song(&song, ui)
 }
 
-fn play_song(song: &Song) -> Result<()> {
-    println!("Now playing: {}", song.title);
+fn play_song(song: &Song, ui: &mut impl Ui) -> Result<()> {
+    ui.print_message(&format!("Now playing: {}", song.title));
 
     let (_stream, stream_handle) = OutputStream::try_default()?;
     let sink = Sink::try_new(&stream_handle)?;
@@ -55,25 +55,25 @@ fn play_song(song: &Song) -> Result<()> {
 
     terminal::enable_raw_mode()?;
 
-    let action = player_loop(&sink, &song.title)?;
+    let action = player_loop(&sink, &song.title, ui)?;
 
     terminal::disable_raw_mode()?;
 
     match action {
-        PlayerAction::Finished => println!("\n✓ Playback ended"),
-        PlayerAction::Quit => println!("\n✓ Playback stopped"),
+        PlayerAction::Finished => ui.print_message("\n✓ Playback ended"),
+        PlayerAction::Quit => ui.print_message("\n✓ Playback stopped"),
     }
 
     Ok(())
 }
 
-pub fn play_playlist(songs: Vec<Song>) -> Result<()> {
+pub fn play_playlist(songs: Vec<Song>, ui: &mut impl Ui) -> Result<()> {
     if songs.is_empty() {
-        println!("No songs found to play.");
+        ui.print_message("No songs found to play.");
         return Ok(());
     }
 
-    println!("Queueing {} songs...\n", songs.len());
+    ui.print_message(&format!("Queueing {} songs...\n", songs.len()));
 
     terminal::enable_raw_mode()?;
 
@@ -83,7 +83,7 @@ pub fn play_playlist(songs: Vec<Song>) -> Result<()> {
     let total_songs = songs.len();
 
     for (index, song) in songs.iter().enumerate() {
-        println!("\n[{}/{}] Now playing: {}", index + 1, total_songs, song.title);
+        ui.print_message(&format!("\n[{}/{}] Now playing: {}", index + 1, total_songs, song.title));
 
         let file = File::open(&song.path)?;
         let source = Decoder::new(BufReader::new(file))
@@ -91,48 +91,26 @@ pub fn play_playlist(songs: Vec<Song>) -> Result<()> {
 
         sink.append(source);
 
-        match player_loop(&sink, &song.title)? {
+        match player_loop(&sink, &song.title, ui)? {
             PlayerAction::Finished => continue,
             PlayerAction::Quit => {
                 terminal::disable_raw_mode()?;
-                println!("\n✓ Playback stopped");
+                ui.print_message("\n✓ Playback stopped");
                 return Ok(());
             }
         }
     }
 
     terminal::disable_raw_mode()?;
-    println!("\n✓ Playlist finished");
+    ui.print_message("\n✓ Playlist finished");
 
     Ok(())
 }
 
-// TODO Refactor it
-fn print_status(is_paused: bool, current_info: &str) {
-    let mut stdout = stdout();
-
-    // Move cursor to beginning of line and clear it
-    stdout.execute(cursor::MoveToColumn(0)).ok();
-    stdout.execute(terminal::Clear(ClearType::CurrentLine)).ok();
-
-    print!("{} | {} | [Space/P/K: Pause/Play | Q/Esc: Quit]",
-           if is_paused { "⏸ Paused " } else { "▶ Playing" },
-           current_info);
-
-    stdout.flush().ok();
-}
-
-fn clear_status_line() {
-    let mut stdout = stdout();
-    stdout.execute(cursor::MoveToColumn(0)).ok();
-    stdout.execute(terminal::Clear(ClearType::CurrentLine)).ok();
-    stdout.flush().ok();
-}
-
 // TODO Change the key handling
-fn player_loop(sink: &Sink, title: &str) -> Result<PlayerAction> {
+fn player_loop(sink: &Sink, title: &str, ui: &mut impl Ui) -> Result<PlayerAction> {
     let mut is_paused = false;
-    print_status(is_paused, title);
+    ui.show_status(is_paused, title);
 
     loop {
         if sink.empty() {
@@ -151,11 +129,10 @@ fn player_loop(sink: &Sink, title: &str) -> Result<PlayerAction> {
                             sink.pause();
                             is_paused = true;
                         }
-                        print_status(is_paused, title);
+                        ui.show_status(is_paused, title);
                     }
                     KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
-                        clear_status_line();
-                        println!("\nQuitting...");
+                        ui.print_message("\nQuitting...");
                         return Ok(PlayerAction::Quit);
                     }
                     _ => {}
