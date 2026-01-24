@@ -22,10 +22,9 @@ pub fn handle_set_path(path_str: String, store: &StoreManager, ui: &mut impl Ui)
     state.config.root_path = Some(fs::canonicalize(path)?); // Store absolute path
 
     store.save(&state)?;
-    ui.print_message(&format!("Music path updated to: {:?}", state.config.root_path));
+    ui.print_message(&format!("Music path updated to: {:?}", state.config.root_path.unwrap()));
 
-    // TODO Create library
-    Ok(())
+    handle_refresh(store, ui)
 }
 
 // TODO Maybe add an optional customPath
