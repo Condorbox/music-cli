@@ -39,4 +39,10 @@ pub enum Commands {
         /// Song index
         index: usize,
     },
+
+    /// Search for songs in your library
+    Search {
+        /// Search query (searches title, artist, and album)
+        query: String,
+    },
 }

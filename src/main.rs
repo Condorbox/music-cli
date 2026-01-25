@@ -11,7 +11,6 @@ use player::audio;
 use library::store::StoreManager;
 use library::playlist;
 use ui::terminal::TerminalUi;
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
@@ -48,6 +47,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             playlist::handle_select(index, &store, &mut ui)?;
         }
 
+        Commands::Search { query } => {
+            playlist::handle_search(query, &store, &mut ui)?;
+        }
     }
 
     Ok(())
