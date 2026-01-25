@@ -14,12 +14,6 @@ impl TerminalUi {
     pub fn new() -> Self {
         Self
     }
-
-    fn format_duration(seconds: u64) -> String {
-        let mins = seconds / 60;
-        let secs = seconds % 60;
-        format!("{}:{:02}", mins, secs)
-    }
 }
 
 impl Ui for TerminalUi {
@@ -40,8 +34,8 @@ impl Ui for TerminalUi {
             info_parts.push(format!("from '{}'", album));
         }
 
-        if let Some(duration) = song.duration {
-            info_parts.push(format!("[{}]", Self::format_duration(duration)));
+        if let Some(_duration) = song.duration {
+            info_parts.push(format!("[{}]", song.format_duration()));
         }
 
         let metadata_str = info_parts.join(" ");

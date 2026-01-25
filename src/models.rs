@@ -16,7 +16,7 @@ pub struct Song {
     pub artist: Option<String>,
     pub album: Option<String>,
     pub track_number: Option<u32>,
-    pub duration: Option<u64>, // Duration in seconds
+    pub duration: Option<std::time::Duration>,
 }
 
 impl Song {
@@ -25,6 +25,13 @@ impl Song {
             Ok(song) => song,
             Err(_) => Self::fallback(path),
         }
+    }
+
+    pub fn format_duration(&self) -> String {
+        let seconds = self.duration.map(|d| d.as_secs()).unwrap_or(0);
+        let mins = seconds / 60;
+        let secs = seconds % 60;
+        format!("{}:{:02}", mins, secs)
     }
 
     fn extract_metadata(path: &Path) -> anyhow::Result<Self> {
@@ -38,7 +45,7 @@ impl Song {
             artist: tag.and_then(|t| t.artist().map(|s| s.into_owned())),
             album: tag.and_then(|t| t.album().map(|s| s.into_owned())),
             track_number: tag.and_then(|t| t.track()),
-            duration: Some(tagged_file.properties().duration().as_secs()),
+            duration: Some(tagged_file.properties().duration()),
         })
     }
 
@@ -52,7 +59,7 @@ impl Song {
             duration: None,
         }
     }
-    
+
     fn extract_filename(path: &Path) -> String {
         path.file_stem()
             .and_then(|s| s.to_str())
