@@ -1,4 +1,4 @@
-use crate::models::AppState;
+use crate::models::{AppState, Song};
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::PathBuf;
@@ -31,5 +31,12 @@ impl StoreManager {
         let content = serde_json::to_string_pretty(state)?;
         fs::write(&self.file_path, content)?;
         Ok(())
+    }
+
+    pub fn search_library<'a>(songs: &'a [Song], query: &str) -> Vec<(usize, &'a Song)> {
+        songs.iter()
+            .enumerate()
+            .filter(|(_, song)| song.matches_query(query))
+            .collect()
     }
 }

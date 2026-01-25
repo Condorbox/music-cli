@@ -104,51 +104,16 @@ pub fn handle_search(query: String, store: &StoreManager, ui: &mut impl Ui) -> R
         anyhow::bail!("Library is empty. Run '{} refresh' or set a path.", APP_NAME);
     }
 
-    let query_lower = query.to_lowercase();
-    let matches: Vec<_> = state
-        .library
-        .iter()
-        .enumerate()
-        .filter(|(_, song)| {
-            song.title.to_lowercase().contains(&query_lower)
-                || song
-                    .artist
-                    .as_ref()
-                    .map_or(false, |a| a.to_lowercase().contains(&query_lower))
-                || song
-                    .album
-                    .as_ref()
-                    .map_or(false, |a| a.to_lowercase().contains(&query_lower))
-        })
-        .collect();
+    let matches = StoreManager::search_library(&state.library, &query);
 
     if matches.is_empty() {
         ui.print_message(&format!("No songs found matching: '{}'", query));
         return Ok(());
     }
 
-    ui.print_message(&format!(
-        "Found {} songs matching '{}':",
-        matches.len(),
-        query
-    ));
-
+    ui.print_message(&format!("Found {} matches:", matches.len()));
     for (index, song) in matches {
-        let artist_info = song
-            .artist
-            .as_ref()
-            .map(|a| format!(" - {}", a))
-            .unwrap_or_default();
-        let album_info = song
-            .album
-            .as_ref()
-            .map(|a| format!(" ({})", a))
-            .unwrap_or_default();
-
-        ui.print_message(&format!(
-            "[{}] {}{}{}",
-            index, song.title, artist_info, album_info
-        ));
+        ui.print_message(&format!("[{}] {}", index, song));
     }
 
     Ok(())

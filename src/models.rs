@@ -1,3 +1,4 @@
+use std::fmt;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use lofty::probe::Probe;
@@ -34,6 +35,13 @@ impl Song {
         format!("{}:{:02}", mins, secs)
     }
 
+    pub fn matches_query(&self, query: &str) -> bool {
+        let q = query.to_lowercase();
+        self.title.to_lowercase().contains(&q)
+            || self.artist.as_ref().map_or(false, |a| a.to_lowercase().contains(&q))
+            || self.album.as_ref().map_or(false, |a| a.to_lowercase().contains(&q))
+    }
+
     fn extract_metadata(path: &Path) -> anyhow::Result<Self> {
         let tagged_file = Probe::open(path)?.read()?;
         let tag = tagged_file.primary_tag().or_else(|| tagged_file.first_tag());
@@ -65,6 +73,25 @@ impl Song {
             .and_then(|s| s.to_str())
             .unwrap_or("Unknown")
             .to_string()
+    }
+}
+
+impl fmt::Display for Song {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let duration_str = self.duration
+            .map(|d| {
+                let s = d.as_secs();
+                format!("{}:{:02}", s / 60, s % 60)
+            })
+            .unwrap_or_else(|| "--:--".to_string());
+
+        write!(
+            f,
+            "{} - {} [{}]",
+            self.artist.as_deref().unwrap_or("Unknown Artist"),
+            self.title,
+            duration_str
+        )
     }
 }
 
