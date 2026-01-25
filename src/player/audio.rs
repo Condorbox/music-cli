@@ -28,20 +28,8 @@ pub fn play_file(path: std::path::PathBuf, ui: &mut impl Ui) -> Result<()> {
     if !path.is_file() {
         anyhow::bail!("Path is not a file: {}", path.display());
     }
-
-    let song = Song {
-        path: path.to_path_buf(),
-        title: path.file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("Unknown")
-            .to_string(),
-        artist: None,
-        album: None,
-        track_number: None,
-        duration: None,
-    };
-
-    play_song(&song, ui)
+    
+    play_song(&Song::from_path(&path), ui)
 }
 
 pub fn play_song(song: &Song, ui: &mut impl Ui) -> Result<()> {
