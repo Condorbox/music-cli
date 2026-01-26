@@ -1,4 +1,5 @@
 use std::io::{stdout, Stdout};
+use std::cell::RefCell;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute,
@@ -16,10 +17,11 @@ use std::time::Duration;
 
 use crate::models::Song;
 use crate::ui::Ui;
+use crate::utils::APP_NAME;
 
 pub struct TuiUi {
     terminal: Option<Terminal<CrosstermBackend<Stdout>>>,
-    list_state: ListState,
+    list_state: RefCell<ListState>,
     songs: Vec<Song>,
     status_message: String,
     current_song: Option<Song>,
@@ -30,7 +32,7 @@ impl TuiUi {
     pub fn new() -> Self {
         Self {
             terminal: None,
-            list_state: ListState::default(),
+            list_state: RefCell::new(ListState::default()),
             songs: Vec::new(),
             status_message: String::from("Welcome to Music CLI"),
             current_song: None,
@@ -58,22 +60,23 @@ impl TuiUi {
 
     pub fn set_songs(&mut self, songs: Vec<Song>) {
         self.songs = songs;
-        if !self.songs.is_empty() && self.list_state.selected().is_none() {
-            self.list_state.select(Some(0));
+        if !self.songs.is_empty() && self.list_state.borrow().selected().is_none() {
+            self.list_state.borrow_mut().select(Some(0));
         }
     }
 
-    pub fn get_selected_song(&self) -> Option<&Song> {
-        self.list_state.selected()
-            .and_then(|i| self.songs.get(i))
+    pub fn get_selected_song(&self) -> Option<Song> {
+        self.list_state.borrow().selected()
+            .and_then(|i| self.songs.get(i).cloned())
     }
 
     pub fn get_selected_index(&self) -> Option<usize> {
-        self.list_state.selected()
+        self.list_state.borrow().selected()
     }
 
     pub fn next_song(&mut self) {
-        let i = match self.list_state.selected() {
+        let mut state = self.list_state.borrow_mut();
+        let i = match state.selected() {
             Some(i) => {
                 if i >= self.songs.len() - 1 {
                     0
@@ -83,11 +86,12 @@ impl TuiUi {
             }
             None => 0,
         };
-        self.list_state.select(Some(i));
+        state.select(Some(i));
     }
 
     pub fn previous_song(&mut self) {
-        let i = match self.list_state.selected() {
+        let mut state = self.list_state.borrow_mut();
+        let i = match state.selected() {
             Some(i) => {
                 if i == 0 {
                     self.songs.len().saturating_sub(1)
@@ -97,14 +101,21 @@ impl TuiUi {
             }
             None => 0,
         };
-        self.list_state.select(Some(i));
+        state.select(Some(i));
     }
 
     pub fn render(&mut self) -> anyhow::Result<()> {
-        let mut terminal = self.terminal.take();
-        if let Some(ref mut terminal) = terminal {
-            terminal.draw(|f| self.draw_ui(f))?;
-        }
+        // Take the terminal out temporarily to avoid borrow conflicts
+        let mut terminal = match self.terminal.take() {
+            Some(t) => t,
+            None => return Ok(()),
+        };
+
+        // Now self is not borrowed, so the closure can borrow it
+        terminal.draw(|f| self.draw_ui(f))?;
+
+        // Put the terminal back
+        self.terminal = Some(terminal);
         Ok(())
     }
 
@@ -122,13 +133,13 @@ impl TuiUi {
         Ok(None)
     }
 
-    fn draw_ui(&mut self, f: &mut Frame) {
+    fn draw_ui(&self, f: &mut Frame) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(3),  // Header
                 Constraint::Min(0),     // Main content
-                Constraint::Length(3),  // Now playing
+                Constraint::Length(4),  // Now playing
                 Constraint::Length(3),  // Controls
             ])
             .split(f.area());
@@ -140,13 +151,13 @@ impl TuiUi {
     }
 
     fn draw_header(&self, f: &mut Frame, area: Rect) {
-        let title = Paragraph::new("♪ Music CLI Player ♪")
+        let title = Paragraph::new(format!("♪ {} Player ♪ ", APP_NAME))
             .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
             .block(Block::default().borders(Borders::ALL));
         f.render_widget(title, area);
     }
 
-    fn draw_song_list(&mut self, f: &mut Frame, area: Rect) {
+    fn draw_song_list(&self, f: &mut Frame, area: Rect) {
         let items: Vec<ListItem> = self
             .songs
             .iter()
@@ -176,7 +187,8 @@ impl TuiUi {
             )
             .highlight_symbol("▶ ");
 
-        f.render_stateful_widget(list, area, &mut self.list_state);
+        // Use borrow_mut() to get mutable access to list_state
+        f.render_stateful_widget(list, area, &mut *self.list_state.borrow_mut());
     }
 
     fn draw_now_playing(&self, f: &mut Frame, area: Rect) {

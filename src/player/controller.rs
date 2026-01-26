@@ -12,60 +12,51 @@ pub fn run_tui_player(ui: &mut TuiUi) -> Result<()> {
     loop {
         ui.render()?;
 
-        // Check if song finished playing and auto-advance
         if !player.is_playing() && player.current_song().is_some() {
             ui.next_song();
-            if let Some(song) = ui.get_selected_song() {
-                let song = song.clone();
-                player.play_song(&song)?;
-                ui.set_playback_state(Some(&song), false);
-            } else {
-                ui.set_playback_state(None, false);
-            }
+            play_active_selection(ui, &mut player)?;
         }
 
-        // Handle user input
         if let Some(event) = ui.handle_input(Duration::from_millis(100))? {
             match event {
                 TuiEvent::Quit => break,
 
                 TuiEvent::PlaySelected => {
-                    if let Some(song) = ui.get_selected_song() {
-                        let song = song.clone();
-                        player.play_song(&song)?;
-                        ui.set_playback_state(Some(&song), false);
-                    }
-                }
-
-                TuiEvent::TogglePause => {
-                    player.toggle_pause();
-                    if let Some(song) = player.current_song() {
-                        ui.set_playback_state(Some(song), player.is_paused());
-                    }
+                    play_active_selection(ui, &mut player)?;
                 }
 
                 TuiEvent::NextTrack => {
                     ui.next_song();
-                    if let Some(song) = ui.get_selected_song() {
-                        let song = song.clone();
-                        player.play_song(&song)?;
-                        ui.set_playback_state(Some(&song), false);
-                    }
+                    play_active_selection(ui, &mut player)?;
                 }
 
                 TuiEvent::PreviousTrack => {
                     ui.previous_song();
-                    if let Some(song) = ui.get_selected_song() {
-                        let song = song.clone();
-                        player.play_song(&song)?;
-                        ui.set_playback_state(Some(&song), false);
-                    }
+                    play_active_selection(ui, &mut player)?;
                 }
 
-                TuiEvent::Navigate => {}
-                TuiEvent::None => {}
+                TuiEvent::TogglePause => {
+                    player.toggle_pause();
+                    ui.set_playback_state(player.current_song(), player.is_paused());
+                }
+
+                TuiEvent::Navigate | TuiEvent::None => {}
             }
         }
+
+    }
+
+    Ok(())
+}
+
+fn play_active_selection(ui: &mut TuiUi, player: &mut TuiPlayer) -> Result<()> {
+    if let Some(song) = ui.get_selected_song() {
+        let song = song.clone();
+        player.play_song(&song)?;
+        ui.set_playback_state(Some(&song), false);
+    } else {
+        // Handle case where list might be empty
+        ui.set_playback_state(None, false);
     }
 
     Ok(())
