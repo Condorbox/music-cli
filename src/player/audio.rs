@@ -222,3 +222,10 @@ impl TuiPlayer {
         self.is_paused = false;
     }
 }
+
+// So it does not leak
+impl Drop for TuiPlayer {
+    fn drop(&mut self) {
+        self.sink.stop();
+    }
+}
