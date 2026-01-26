@@ -16,7 +16,6 @@ use std::time::Duration;
 
 use crate::models::Song;
 use crate::ui::Ui;
-use crate::utils::APP_NAME;
 
 pub struct TuiUi {
     terminal: Option<Terminal<CrosstermBackend<Stdout>>>,
@@ -33,7 +32,7 @@ impl TuiUi {
             terminal: None,
             list_state: ListState::default(),
             songs: Vec::new(),
-            status_message: String::from(format!("Songs not found: {}", APP_NAME)),
+            status_message: String::from("Welcome to Music CLI"),
             current_song: None,
             is_paused: false,
         }
@@ -69,6 +68,10 @@ impl TuiUi {
             .and_then(|i| self.songs.get(i))
     }
 
+    pub fn get_selected_index(&self) -> Option<usize> {
+        self.list_state.selected()
+    }
+
     pub fn next_song(&mut self) {
         let i = match self.list_state.selected() {
             Some(i) => {
@@ -99,11 +102,24 @@ impl TuiUi {
 
     pub fn render(&mut self) -> anyhow::Result<()> {
         let mut terminal = self.terminal.take();
-
         if let Some(ref mut terminal) = terminal {
             terminal.draw(|f| self.draw_ui(f))?;
         }
         Ok(())
+    }
+
+    pub fn set_playback_state(&mut self, song: Option<&Song>, is_paused: bool) {
+        self.current_song = song.cloned();
+        self.is_paused = is_paused;
+    }
+
+    pub fn handle_input(&mut self, timeout: Duration) -> anyhow::Result<Option<TuiEvent>> {
+        if event::poll(timeout)? {
+            if let Event::Key(key) = event::read()? {
+                return Ok(Some(self.process_key(key)));
+            }
+        }
+        Ok(None)
     }
 
     fn draw_ui(&mut self, f: &mut Frame) {
@@ -205,18 +221,9 @@ impl TuiUi {
                 Span::raw("q: Quit"),
             ])
         ])
-        .style(Style::default().fg(Color::Gray))
-        .block(Block::default().borders(Borders::ALL).title(" Controls "));
+            .style(Style::default().fg(Color::Gray))
+            .block(Block::default().borders(Borders::ALL).title(" Controls "));
         f.render_widget(controls, area);
-    }
-
-    pub fn handle_input(&mut self, timeout: Duration) -> anyhow::Result<Option<TuiEvent>> {
-        if event::poll(timeout)? {
-            if let Event::Key(key) = event::read()? {
-                return Ok(Some(self.process_key(key)));
-            }
-        }
-        Ok(None)
     }
 
     fn process_key(&mut self, key: KeyEvent) -> TuiEvent {
