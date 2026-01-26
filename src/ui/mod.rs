@@ -1,6 +1,7 @@
 use crate::models::Song;
 
 pub mod terminal;
+pub mod tui;
 
 pub trait Ui {
     fn show_status(&mut self, is_paused: bool, song: &Song);

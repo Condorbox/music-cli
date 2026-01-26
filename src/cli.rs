@@ -45,4 +45,7 @@ pub enum Commands {
         /// Search query (searches title, artist, and album)
         query: String,
     },
+
+    /// Browse and play songs with interactive TUI
+    Browse,
 }
