@@ -1,82 +1,26 @@
 mod cli;
-mod player;
-mod models;
-mod library;
+mod cli_handlers;
+mod core;
+mod application;
+mod modules;
 mod utils;
-mod ui;
 
 use cli::{Cli, Commands};
 use clap::Parser;
+use anyhow::Result;
 
-use player::audio;
-use library::store::StoreManager;
-use library::playlist;
-use ui::terminal::TerminalUi;
-use crate::player::controller;
-use crate::ui::tui::TuiUi;
-use crate::ui::Ui;
-use crate::utils::APP_NAME;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let store = StoreManager::new()?;
-
-    let mut ui = TerminalUi::new();
-
+    // Route commands to their handlers
     match cli.command {
-        Commands::Play { file } => {
-            audio::play_file(file, &mut ui)?;
-        }
-
-        Commands::Path { directory } => {
-            playlist::handle_set_path(
-                directory.to_string_lossy().to_string(),
-                &store,
-                &mut ui
-            )?;
-        }
-
-        Commands::Refresh => {
-            playlist::handle_refresh(&store, &mut ui)?;
-        }
-
-        Commands::Playlist => {
-            playlist::handle_playlist(&store, &mut ui)?;
-        }
-
-        Commands::List => {
-            playlist::handle_list(&store, &mut ui)?;
-        }
-
-        Commands::Select { index } => {
-            playlist::handle_select(index, &store, &mut ui)?;
-        }
-
-        Commands::Search { query } => {
-            playlist::handle_search(query, &store, &mut ui)?;
-        }
-
-        Commands::Browse => {
-            let mut ui = TuiUi::new();
-            ui.init()?;
-
-            let state = store.load()?;
-            if state.library.is_empty() {
-                ui.cleanup()?;
-                ui.print_error(&format!("Library is empty. Run '{} refresh' first.", APP_NAME));
-                return Ok(());
-            }
-
-            ui.set_songs(state.library);
-
-            let result = controller::run_tui_player(&mut ui);
-
-            ui.cleanup()?;
-
-            result?;
-        }
+        Commands::Browse => cli_handlers::handle_browse(),
+        Commands::Play { file } => cli_handlers::handle_play(file),
+        Commands::Path { directory } => cli_handlers::handle_path(directory),
+        Commands::Refresh => cli_handlers::handle_refresh(),
+        Commands::Playlist => cli_handlers::handle_playlist(),
+        Commands::List => cli_handlers::handle_list(),
+        Commands::Select { index } => cli_handlers::handle_select(index),
+        Commands::Search { query } => cli_handlers::handle_search(query),
     }
-
-    Ok(())
 }

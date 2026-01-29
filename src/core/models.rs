@@ -5,11 +5,6 @@ use lofty::probe::Probe;
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::tag::Accessor;
 
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
-pub struct AppConfig {
-    pub root_path: Option<PathBuf>,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Song {
     pub path: PathBuf,
@@ -93,10 +88,4 @@ impl fmt::Display for Song {
             duration_str
         )
     }
-}
-
-#[derive(Serialize, Deserialize, Debug, Default)]
-pub struct AppState {
-    pub config: AppConfig,
-    pub library: Vec<Song>,
 }

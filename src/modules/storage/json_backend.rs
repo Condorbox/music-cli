@@ -1,13 +1,14 @@
-use crate::models::{AppState, Song};
+use crate::core::traits::StorageBackend;
+use crate::application::state::AppState;
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::PathBuf;
 
-pub struct StoreManager {
+pub struct JsonStorageBackend {
     file_path: PathBuf,
 }
 
-impl StoreManager {
+impl JsonStorageBackend {
     pub fn new() -> Result<Self> {
         let mut path = dirs::config_dir().context("Could not find config directory")?;
         path.push("music-cli");
@@ -17,8 +18,10 @@ impl StoreManager {
         path.push("db.json");
         Ok(Self { file_path: path })
     }
+}
 
-    pub fn load(&self) -> Result<AppState> {
+impl StorageBackend for JsonStorageBackend {
+    fn load(&self) -> Result<AppState> {
         if !self.file_path.exists() {
             return Ok(AppState::default());
         }
@@ -27,16 +30,9 @@ impl StoreManager {
         Ok(state)
     }
 
-    pub fn save(&self, state: &AppState) -> Result<()> {
+    fn save(&self, state: &AppState) -> Result<()> {
         let content = serde_json::to_string_pretty(state)?;
         fs::write(&self.file_path, content)?;
         Ok(())
-    }
-
-    pub fn search_library<'a>(songs: &'a [Song], query: &str) -> Vec<(usize, &'a Song)> {
-        songs.iter()
-            .enumerate()
-            .filter(|(_, song)| song.matches_query(query))
-            .collect()
     }
 }
