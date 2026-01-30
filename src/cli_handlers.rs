@@ -213,17 +213,19 @@ pub fn handle_search(query: String) -> Result<()> {
     Ok(())
 }
 
-// TODO Investigate if Rodio volume is linear or  logarithmic
-// In case is linear make it logarithmic 
 pub fn handle_volume(volume: Option<u8>) -> Result<()> {
     let storage = JsonStorageBackend::new()?;
-    let mut state = storage.load()?;
+    let state = storage.load()?;
     let ui = TerminalRenderer::new();
 
     match volume {
         Some(vol) => {
-            // Convert 0-100 -> 0.0-1.0 range
-            let volume_f32 = vol as f32 / 100.0;
+            // Convert user input (0-100) to amplitude multiplier using perceptual scaling
+            // Human hearing is logarithmic, so we use x^4 to approx an exponential curve.
+            // This provides a 60dB dynamic, so volume is approx linear so the diff btw 1-2 is the same as 99-100
+            // if not the diff would be much higher btw 1-2 than btw 99-100.
+            let x = vol as f32 / 100.0;
+            let volume_f32 = x.powi(4);
 
             let mut app = Application::new()
                 .with_playback_backend(Box::new(RodioBackend::new()?))
