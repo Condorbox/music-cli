@@ -42,6 +42,8 @@ impl PlaybackBackend for RodioBackend {
         self.current_song = Some(song.clone());
         self.is_paused = false;
 
+        self.sink.play();
+
         Ok(())
     }
 
