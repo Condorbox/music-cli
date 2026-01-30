@@ -22,5 +22,6 @@ fn main() -> Result<()> {
         Commands::List => cli_handlers::handle_list(),
         Commands::Select { index } => cli_handlers::handle_select(index),
         Commands::Search { query } => cli_handlers::handle_search(query),
+        Commands::Volume { volume } => {cli_handlers::handle_volume(volume)},
     }
 }

@@ -48,4 +48,11 @@ pub enum Commands {
 
     /// Browse and play songs with interactive TUI
     Browse,
+
+    /// Set volume between 0 and 100 (or show current if no argument)
+    Volume {
+        /// Volume level (0 - 100). If omitted, shows current volume
+        #[arg(value_parser = clap::value_parser!(u8).range(0..=100))]
+        volume: Option<u8>,
+    },
 }

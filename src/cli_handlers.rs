@@ -212,3 +212,45 @@ pub fn handle_search(query: String) -> Result<()> {
 
     Ok(())
 }
+
+// TODO Investigate if Rodio volume is linear or  logarithmic
+// In case is linear make it logarithmic 
+pub fn handle_volume(volume: Option<u8>) -> Result<()> {
+    let storage = JsonStorageBackend::new()?;
+    let mut state = storage.load()?;
+    let ui = TerminalRenderer::new();
+
+    match volume {
+        Some(vol) => {
+            // Convert 0-100 -> 0.0-1.0 range
+            let volume_f32 = vol as f32 / 100.0;
+
+            let mut app = Application::new()
+                .with_playback_backend(Box::new(RodioBackend::new()?))
+                .with_storage_backend(Box::new(storage))
+                .with_ui_renderer(Box::new(ui));
+
+            app.init()?;
+
+            // Send volume change event
+            app.event_sender().send(AppEvent::Playback(PlaybackEvent::VolumeChanged {
+                volume: volume_f32,
+            }))?;
+
+            app.run_once()?;
+
+            app.cleanup()?;
+
+
+
+            let ui = TerminalRenderer::new();
+            ui.print_message(&format!("Volume set to: {}%", vol));
+        }
+        None => {
+            let current_percent = (state.config.volume * 100.0).round() as u8;
+            ui.print_message(&format!("Current volume: {}%", current_percent));
+        }
+    }
+
+    Ok(())
+}

@@ -70,7 +70,13 @@ impl Application {
         if let Some(storage) = &self.storage_backend {
             match storage.load() {
                 Ok(loaded_state) => {
+                    let volume = loaded_state.config.volume;
                     *self.state.lock().unwrap() = loaded_state;
+
+                    // Set volume on playback backend
+                    if let Some(playback) = &mut self.playback_backend {
+                        playback.set_volume(volume);
+                    }
 
                     // Emit library loaded event
                     let songs = self.state.lock().unwrap().library.songs.clone();
@@ -146,6 +152,12 @@ impl Application {
         Ok(())
     }
 
+    /// Process events once without entering the main loop (useful for one-off commands)
+    pub fn run_once(&mut self) -> Result<()> {
+        self.process_events()?;
+        Ok(())
+    }
+
     /// Handle a single event
     fn handle_event(&mut self, event: AppEvent) -> Result<()> {
         // Update state based on event
@@ -197,6 +209,10 @@ impl Application {
                             }))?;
                     }
                 }
+            }
+
+            PlaybackEvent::VolumeChanged { volume } => {
+                playback.set_volume(*volume);
             }
 
             _ => {}
