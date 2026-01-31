@@ -213,6 +213,12 @@ impl Application {
 
             PlaybackEvent::VolumeChanged { volume } => {
                 playback.set_volume(*volume);
+
+                // Save to storage
+                if let Some(storage) = &self.storage_backend {
+                    let state = self.state.lock().unwrap();
+                    storage.save(&state)?;
+                }
             }
 
             _ => {}
@@ -309,6 +315,48 @@ impl Application {
                             .send(AppEvent::Playback(PlaybackEvent::PlayRequested { song }))?;
                     }
                 }
+            }
+
+            UiEvent::VolumeChangeRequested { volume } => {
+                // Convert 0-100 to 0.0-1.0
+                let volume_f32 = *volume as f32 / 100.0;
+
+                self.event_tx
+                    .send(AppEvent::Playback(PlaybackEvent::VolumeChanged {
+                        volume: volume_f32
+                    }))?;
+
+                self.event_tx
+                    .send(AppEvent::Ui(UiEvent::ShowMessage {
+                        message: format!("Volume set to {}%", volume)
+                    }))?;
+            }
+
+            // TODO Maybe also refresh or refresh btn
+            UiEvent::PathChangeRequested { path } => {
+                if !path.is_dir() {
+                    self.event_tx
+                        .send(AppEvent::Ui(UiEvent::ShowError {
+                            message: "Invalid directory path".to_string()
+                        }))?;
+                    return Ok(());
+                }
+
+                // Update config
+                let mut state = self.state.lock().unwrap();
+                state.config.root_path = Some(path.clone());
+                drop(state);
+
+                // Save to storage
+                if let Some(storage) = &self.storage_backend {
+                    let state = self.state.lock().unwrap();
+                    storage.save(&state)?;
+                }
+
+                self.event_tx
+                    .send(AppEvent::Ui(UiEvent::ShowMessage {
+                        message: format!("Music path updated. Run refresh to scan.")
+                    }))?;
             }
 
             UiEvent::QuitRequested => {
