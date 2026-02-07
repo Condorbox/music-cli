@@ -332,7 +332,6 @@ impl Application {
                     }))?;
             }
 
-            // TODO Maybe also refresh or refresh btn
             UiEvent::PathChangeRequested { path } => {
                 if !path.is_dir() {
                     self.event_tx
@@ -356,6 +355,27 @@ impl Application {
                 self.event_tx
                     .send(AppEvent::Ui(UiEvent::ShowMessage {
                         message: format!("Music path updated. Run refresh to scan.")
+                    }))?;
+            }
+
+            // Handle search toggle
+            UiEvent::SearchToggled { active } => {
+                // State update happens in apply_event
+                // Just emit confirmation message
+                if !active {
+                    self.event_tx
+                        .send(AppEvent::Ui(UiEvent::ShowMessage {
+                            message: "Search cleared".to_string()
+                        }))?;
+                }
+            }
+
+            // Handle search query change
+            UiEvent::SearchQueryChanged { query } => {
+                // Trigger actual search through Library event
+                self.event_tx
+                    .send(AppEvent::Library(LibraryEvent::SearchRequested {
+                        query: query.clone()
                     }))?;
             }
 

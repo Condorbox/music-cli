@@ -99,6 +99,12 @@ pub enum UiEvent {
 
     /// User requested path change
     PathChangeRequested { path: PathBuf },
+
+    /// Search mode toggled
+    SearchToggled { active: bool },
+
+    /// Search query updated
+    SearchQueryChanged { query: String },
 }
 
 /// Type alias for event sender

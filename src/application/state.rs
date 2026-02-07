@@ -23,10 +23,10 @@ pub struct ConfigState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LibraryState {
     pub songs: Vec<Song>,
-    
+
     #[serde(skip)]
     pub is_scanning: bool,
-    
+
     #[serde(skip)]
     pub last_scan_path: Option<PathBuf>,
 }
@@ -35,18 +35,18 @@ pub struct LibraryState {
 pub struct PlaybackState {
     #[serde(skip)]
     pub current_song: Option<Song>,
-    
+
     #[serde(skip)]
     pub is_playing: bool,
-    
+
     #[serde(skip)]
     pub is_paused: bool,
-    
+
     pub volume: f32,
-    
+
     #[serde(skip)]
     pub playlist: Vec<Song>,
-    
+
     #[serde(skip)]
     pub current_index: Option<usize>,
 }
@@ -56,6 +56,11 @@ pub struct UiState {
     pub selected_index: Option<usize>,
     pub status_message: String,
     pub error_message: Option<String>,
+
+    // Search state
+    pub search_active: bool,
+    pub search_query: String,
+    pub search_results: Vec<(usize, Song)>, // (original_index, song)
 }
 
 impl Default for UiState {
@@ -64,6 +69,9 @@ impl Default for UiState {
             selected_index: None,
             status_message: "".to_string(),
             error_message: None,
+            search_active: false,
+            search_query: String::new(),
+            search_results: Vec::new(),
         }
     }
 }
@@ -90,8 +98,11 @@ impl Default for AppState {
             },
             ui: UiState {
                 selected_index: None,
-                status_message: "Welcome to Music CLI".to_string(),
+                status_message: "Welcome".to_string(),
                 error_message: None,
+                search_active: false,
+                search_query: String::new(),
+                search_results: Vec::new(),
             },
         }
     }
@@ -138,7 +149,7 @@ impl AppState {
                 }
                 _ => {}
             },
-            
+
             AppEvent::Library(le) => match le {
                 LibraryEvent::ScanStarted { path } => {
                     self.library.is_scanning = true;
@@ -153,7 +164,7 @@ impl AppState {
                     self.library.songs = songs.clone();
                     self.library.is_scanning = false;
                     self.ui.status_message = format!("Found {} songs", count);
-                    
+
                     // Auto-select first song if nothing selected
                     if self.ui.selected_index.is_none() && !songs.is_empty() {
                         self.ui.selected_index = Some(0);
@@ -166,15 +177,22 @@ impl AppState {
                     }
                 }
                 LibraryEvent::SearchResults { results } => {
+                    self.ui.search_results = results.clone();
+
                     if results.is_empty() {
                         self.ui.status_message = "No results found".to_string();
                     } else {
                         self.ui.status_message = format!("Found {} matches", results.len());
+
+                        // Auto-select first result
+                        if !results.is_empty() {
+                            self.ui.selected_index = Some(results[0].0);
+                        }
                     }
                 }
                 _ => {}
             },
-            
+
             AppEvent::Ui(ue) => match ue {
                 UiEvent::SelectionChanged { index } => {
                     self.ui.selected_index = Some(*index);
@@ -186,9 +204,30 @@ impl AppState {
                 UiEvent::ShowError { message } => {
                     self.ui.error_message = Some(message.clone());
                 }
+                UiEvent::SearchToggled { active } => {
+                    self.ui.search_active = *active;
+
+                    if !active {
+                        // Clear search when toggled off
+                        self.ui.search_query.clear();
+                        self.ui.search_results.clear();
+                        self.ui.status_message = "Search cleared".to_string();
+
+                        // Reset to first song
+                        if !self.library.songs.is_empty() {
+                            self.ui.selected_index = Some(0);
+                        }
+                    } else {
+                        self.ui.status_message = "Search mode active".to_string();
+                    }
+                }
+                UiEvent::SearchQueryChanged { query } => {
+                    self.ui.search_query = query.clone();
+                    // Note: Actual search is triggered by LibraryEvent::SearchRequested
+                }
                 _ => {}
             },
-            
+
             AppEvent::Shutdown => {}
         }
     }
