@@ -5,6 +5,7 @@ use anyhow::Result;
 use crossbeam_channel::bounded;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use crate::utils::volume_percent_to_amplitude;
 
 /// Main application orchestrator
 pub struct Application {
@@ -318,8 +319,7 @@ impl Application {
             }
 
             UiEvent::VolumeChangeRequested { volume } => {
-                // Convert 0-100 to 0.0-1.0
-                let volume_f32 = *volume as f32 / 100.0;
+                let volume_f32 = volume_percent_to_amplitude(*volume);
 
                 self.event_tx
                     .send(AppEvent::Playback(PlaybackEvent::VolumeChanged {

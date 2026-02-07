@@ -6,7 +6,7 @@ use crate::modules::playback::rodio_backend::RodioBackend;
 use crate::modules::storage::json_backend::JsonStorageBackend;
 use crate::modules::ui::terminal::renderer::TerminalRenderer;
 use crate::modules::ui::tui::renderer::TuiRenderer;
-use crate::utils::APP_NAME;
+use crate::utils::{amplitude_to_volume, volume_percent_to_amplitude, APP_NAME};
 use anyhow::Result;
 use std::path::PathBuf;
 use crate::core::traits::{PlaybackBackend, StorageBackend};
@@ -220,12 +220,7 @@ pub fn handle_volume(volume: Option<u8>) -> Result<()> {
 
     match volume {
         Some(vol) => {
-            // Convert user input (0-100) to amplitude multiplier using perceptual scaling
-            // Human hearing is logarithmic, so we use x^4 to approx an exponential curve.
-            // This provides a 60dB dynamic, so volume is approx linear so the diff btw 1-2 is the same as 99-100
-            // if not the diff would be much higher btw 1-2 than btw 99-100.
-            let x = vol as f32 / 100.0;
-            let volume_f32 = x.powi(4);
+            let volume_f32 = volume_percent_to_amplitude(vol);
 
             let mut app = Application::new()
                 .with_playback_backend(Box::new(RodioBackend::new()?))
@@ -243,13 +238,11 @@ pub fn handle_volume(volume: Option<u8>) -> Result<()> {
 
             app.cleanup()?;
 
-
-
             let ui = TerminalRenderer::new();
             ui.print_message(&format!("Volume set to: {}%", vol));
         }
         None => {
-            let current_percent = (state.config.volume * 100.0).round() as u8;
+            let current_percent = amplitude_to_volume(state.config.volume);
             ui.print_message(&format!("Current volume: {}%", current_percent));
         }
     }

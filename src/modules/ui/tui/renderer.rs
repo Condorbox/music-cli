@@ -18,7 +18,7 @@ use ratatui::{
 use std::cell::RefCell;
 use std::io::{stdout, Stdout};
 use std::time::Duration;
-use crate::utils::APP_NAME;
+use crate::utils::{amplitude_to_volume, APP_NAME};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum SettingsField {
@@ -73,7 +73,7 @@ impl TuiRenderer {
         }
 
         // Update temp volume from config
-        self.temp_volume = (app_state.config.volume * 100.0) as u8;
+        self.temp_volume = amplitude_to_volume(app_state.config.volume);
     }
 
     fn draw_ui(&self, f: &mut Frame) {
