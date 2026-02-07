@@ -10,6 +10,7 @@ use crate::utils::{amplitude_to_volume, volume_percent_to_amplitude, APP_NAME};
 use anyhow::Result;
 use std::path::PathBuf;
 use crate::core::traits::{PlaybackBackend, StorageBackend};
+use crate::modules::library::search_engine::SearchEngine;
 
 // TODO Maye add a command pattern
 
@@ -201,14 +202,14 @@ pub fn handle_search(query: String) -> Result<()> {
         return Ok(());
     }
 
-    let matches: Vec<_> = state.library.songs
-        .iter()
-        .enumerate()
-        .filter(|(_, song)| song.matches_query(&query))
-        .map(|(i, song)| (i, song.clone()))
-        .collect();
+    // Use fuzzy search engine
+    let search_engine = SearchEngine::new();
+    let search_results = search_engine.search(&state.library.songs, &query);
 
-    ui.print_search_results(&query, &matches);
+    // Convert SearchResult to (index, Song) tuples
+    let results: Vec<(usize, Song)> = search_engine.search_result_to_song_index(search_results);
+
+    ui.print_search_results(&query, &*results);
 
     Ok(())
 }

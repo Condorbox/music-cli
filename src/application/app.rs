@@ -5,6 +5,7 @@ use anyhow::Result;
 use crossbeam_channel::bounded;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use crate::modules::library::search_engine::SearchEngine;
 use crate::utils::volume_percent_to_amplitude;
 
 /// Main application orchestrator
@@ -240,14 +241,13 @@ impl Application {
 
             LibraryEvent::SearchRequested { query } => {
                 let state = self.state.lock().unwrap();
-                let results: Vec<(usize, crate::core::models::Song)> = state
-                    .library
-                    .songs
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, song)| song.matches_query(query))
-                    .map(|(i, song)| (i, song.clone()))
-                    .collect();
+
+                // Use fuzzy search engine instead of simple contains
+                let search_engine = SearchEngine::new();
+                let search_results = search_engine.search(&state.library.songs, query);
+
+                // Convert SearchResult to (index, Song) tuples
+                let results: Vec<(usize, crate::core::models::Song)> = search_engine.search_result_to_song_index(search_results);
 
                 drop(state);
 
@@ -354,7 +354,7 @@ impl Application {
 
                 self.event_tx
                     .send(AppEvent::Ui(UiEvent::ShowMessage {
-                        message: format!("Music path updated. Run refresh to scan.")
+                        message: "Music path updated. Run refresh to scan.".to_string()
                     }))?;
             }
 

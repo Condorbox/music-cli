@@ -30,13 +30,6 @@ impl Song {
         format!("{}:{:02}", mins, secs)
     }
 
-    pub fn matches_query(&self, query: &str) -> bool {
-        let q = query.to_lowercase();
-        self.title.to_lowercase().contains(&q)
-            || self.artist.as_ref().map_or(false, |a| a.to_lowercase().contains(&q))
-            || self.album.as_ref().map_or(false, |a| a.to_lowercase().contains(&q))
-    }
-
     fn extract_metadata(path: &Path) -> anyhow::Result<Self> {
         let tagged_file = Probe::open(path)?.read()?;
         let tag = tagged_file.primary_tag().or_else(|| tagged_file.first_tag());
