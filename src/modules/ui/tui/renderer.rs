@@ -73,7 +73,10 @@ impl TuiRenderer {
         }
 
         // Update temp volume from config
-        self.temp_volume = amplitude_to_volume(app_state.config.volume);
+        if !self.editing_field || self.settings_selected != SettingsField::Volume {
+            self.temp_volume = amplitude_to_volume(app_state.config.volume);
+        }
+
     }
 
     fn draw_ui(&self, f: &mut Frame) {
@@ -373,7 +376,6 @@ impl UiRenderer for TuiRenderer {
                                     }
                                     SettingsField::MusicPath => {
                                         // TODO: Implement path change
-
                                     }
                                 }
                             }
