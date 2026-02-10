@@ -42,6 +42,9 @@ pub enum PlaybackEvent {
 
     /// Volume changed (0.0 - 1.0)
     VolumeChanged { volume: f32 },
+
+    /// Shuffle enabled or disabled
+    Shuffle { enabled: Option<bool> },
 }
 
 #[derive(Debug, Clone)]

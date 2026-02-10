@@ -18,6 +18,7 @@ pub struct AppState {
 pub struct ConfigState {
     pub root_path: Option<PathBuf>,
     pub volume: f32,
+    pub shuffle: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,6 +83,7 @@ impl Default for AppState {
             config: ConfigState {
                 root_path: None,
                 volume: 1.0,
+                shuffle: false,
             },
             library: LibraryState {
                 songs: Vec::new(),
@@ -146,6 +148,17 @@ impl AppState {
                 }
                 PlaybackEvent::Error { message } => {
                     self.ui.error_message = Some(message.clone());
+                }
+
+                PlaybackEvent::Shuffle { enabled} => {
+                    match enabled {
+                        Some(shuffle_enabled) => {
+                            self.config.shuffle = *shuffle_enabled;
+                        }
+                        None => {
+                            self.config.shuffle = !self.config.shuffle;
+                        }
+                    }
                 }
                 _ => {}
             },

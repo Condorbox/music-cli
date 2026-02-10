@@ -55,4 +55,11 @@ pub enum Commands {
         #[arg(value_parser = clap::value_parser!(u8).range(0..=100))]
         volume: Option<u8>,
     },
+
+    /// Toggle shuffle mode for playlist playback
+    Shuffle {
+        /// Explicitly set shuffle state (true/false). If omitted, toggles current state
+        #[arg(value_parser = clap::value_parser!(bool))]
+        enabled: Option<bool>,
+    },
 }

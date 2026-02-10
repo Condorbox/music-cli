@@ -250,3 +250,31 @@ pub fn handle_volume(volume: Option<u8>) -> Result<()> {
 
     Ok(())
 }
+
+pub fn handle_shuffle(enabled: Option<bool>) -> Result<()> {
+    let storage = JsonStorageBackend::new()?;
+    let state = storage.load()?;
+    let ui = TerminalRenderer::new();
+
+    let mut app = Application::new()
+        .with_playback_backend(Box::new(RodioBackend::new()?))
+        .with_storage_backend(Box::new(storage))
+        .with_ui_renderer(Box::new(ui));
+
+    app.init()?;
+
+    app.event_sender().send(AppEvent::Playback(PlaybackEvent::Shuffle {
+        enabled,
+    }))?;
+
+    let shuffle_enabled = enabled.unwrap_or(!state.config.shuffle);
+
+    app.run_once()?;
+
+    app.cleanup()?;
+
+    let ui = TerminalRenderer::new();
+    ui.print_message(&format!("Shuffle set to: {}", shuffle_enabled));
+
+    Ok(())
+}
