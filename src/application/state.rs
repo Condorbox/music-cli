@@ -149,16 +149,8 @@ impl AppState {
                 PlaybackEvent::Error { message } => {
                     self.ui.error_message = Some(message.clone());
                 }
-
                 PlaybackEvent::Shuffle { enabled} => {
-                    match enabled {
-                        Some(shuffle_enabled) => {
-                            self.config.shuffle = *shuffle_enabled;
-                        }
-                        None => {
-                            self.config.shuffle = !self.config.shuffle;
-                        }
-                    }
+                    self.config.shuffle = *enabled;
                 }
                 _ => {}
             },

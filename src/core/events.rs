@@ -44,7 +44,7 @@ pub enum PlaybackEvent {
     VolumeChanged { volume: f32 },
 
     /// Shuffle enabled or disabled
-    Shuffle { enabled: Option<bool> },
+    Shuffle { enabled: bool },
 }
 
 #[derive(Debug, Clone)]
@@ -108,6 +108,9 @@ pub enum UiEvent {
 
     /// Search query updated
     SearchQueryChanged { query: String },
+
+    /// Shuffle toggled
+    ShuffleToggled {shuffle_enabled: bool},
 }
 
 /// Type alias for event sender

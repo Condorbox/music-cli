@@ -263,12 +263,12 @@ pub fn handle_shuffle(enabled: Option<bool>) -> Result<()> {
 
     app.init()?;
 
-    app.event_sender().send(AppEvent::Playback(PlaybackEvent::Shuffle {
-        enabled,
-    }))?;
-
     let shuffle_enabled = enabled.unwrap_or(!state.config.shuffle);
 
+    app.event_sender().send(AppEvent::Playback(PlaybackEvent::Shuffle {
+        enabled: shuffle_enabled,
+    }))?;
+    
     app.run_once()?;
 
     app.cleanup()?;

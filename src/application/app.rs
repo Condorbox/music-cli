@@ -379,6 +379,11 @@ impl Application {
                     }))?;
             }
 
+            UiEvent::ShuffleToggled { shuffle_enabled } => {
+                self.event_tx
+                    .send(AppEvent::Playback(PlaybackEvent::Shuffle{enabled: !shuffle_enabled }))?;
+            }
+
             UiEvent::QuitRequested => {
                 self.event_tx.send(AppEvent::Shutdown)?;
             }

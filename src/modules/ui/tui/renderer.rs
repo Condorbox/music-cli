@@ -37,6 +37,7 @@ pub struct TuiRenderer {
     search_active: bool,
     search_query: String,
     search_results: Vec<(usize, crate::core::models::Song)>,
+    shuffle: bool,
 
     // Settings modal state (UI-only)
     show_settings: bool,
@@ -56,6 +57,7 @@ impl TuiRenderer {
             search_active: false,
             search_query: String::new(),
             search_results: Vec::new(),
+            shuffle: false,
             show_settings: false,
             settings_selected: SettingsField::Volume,
             temp_volume: 100,
@@ -79,6 +81,8 @@ impl TuiRenderer {
         self.search_active = app_state.ui.search_active;
         self.search_query = app_state.ui.search_query.clone();
         self.search_results = app_state.ui.search_results.clone();
+
+        self.shuffle = app_state.config.shuffle;
 
         // Update selected index
         if let Some(index) = app_state.ui.selected_index {
@@ -223,6 +227,13 @@ impl TuiRenderer {
             } else {
                 "▶ PLAYING"
             };
+
+            let shuffle_indicator = if self.shuffle {
+                " 🔀"
+            } else {
+                ""
+            };
+
             vec![
                 Line::from(vec![
                     Span::styled(
@@ -231,26 +242,17 @@ impl TuiRenderer {
                             .fg(Color::Green)
                             .add_modifier(Modifier::BOLD),
                     ),
-                    Span::raw("  "),
-                    Span::styled(&song.title, Style::default().fg(Color::Yellow)),
-                ]),
-                Line::from(vec![
-                    Span::raw("  "),
                     Span::styled(
-                        song.artist.as_deref().unwrap_or("Unknown Artist"),
+                        shuffle_indicator,
                         Style::default().fg(Color::Cyan),
                     ),
-                    Span::raw(" • "),
-                    Span::styled(
-                        song.album.as_deref().unwrap_or("Unknown Album"),
-                        Style::default().fg(Color::Magenta),
-                    ),
+                    Span::raw("  "),
+                    Span::styled(&song.title, Style::default().fg(Color::Yellow)),
                 ]),
             ]
         } else {
             vec![Line::from("No song playing")]
         };
-
         let paragraph = Paragraph::new(content).block(
             Block::default()
                 .borders(Borders::ALL)
@@ -266,6 +268,7 @@ impl TuiRenderer {
             Span::raw("Space: Pause/Play • "),
             Span::raw("n: Next • "),
             Span::raw("b: Previous • "),
+            Span::styled("r: Shuffle • ", Style::default().fg(Color::Cyan)),
             Span::styled("/: Search • ", Style::default().fg(Color::Yellow)),
             Span::raw("s: Settings • "),
             Span::raw("q: Quit"),
@@ -622,6 +625,9 @@ impl UiRenderer for TuiRenderer {
                         }
                         KeyCode::Char('b') | KeyCode::Left => {
                             events.push(UiEvent::PreviousTrackRequested);
+                        }
+                        KeyCode::Char('r') => {
+                            events.push(UiEvent::ShuffleToggled{shuffle_enabled: self.shuffle});
                         }
                         _ => {}
                     }
