@@ -255,7 +255,7 @@ impl Application {
                 }
             }
 
-            PlaybackEvent::Shuffle { enabled: enabled_ } => {
+            PlaybackEvent::Shuffle { enabled: _enabled } => {
                 // State already updated by apply_event
 
                 // Save to storage
