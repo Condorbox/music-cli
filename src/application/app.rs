@@ -6,6 +6,7 @@ use crossbeam_channel::bounded;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use crate::modules::library::search_engine::SearchEngine;
+use crate::modules::playback::shuffle_manager::ShuffleManager;
 use crate::utils::volume_percent_to_amplitude;
 
 /// Main application orchestrator
@@ -13,6 +14,8 @@ pub struct Application {
     state: Arc<Mutex<AppState>>,
     event_tx: EventSender,
     event_rx: EventReceiver,
+
+    shuffle_manager: ShuffleManager,
 
     // Module references
     playback_backend: Option<Box<dyn PlaybackBackend>>,
@@ -31,6 +34,7 @@ impl Application {
             state: Arc::new(Mutex::new(AppState::default())),
             event_tx: tx,
             event_rx: rx,
+            shuffle_manager: ShuffleManager::new(),
             playback_backend: None,
             storage_backend: None,
             ui_renderer: None,
@@ -73,11 +77,19 @@ impl Application {
             match storage.load() {
                 Ok(loaded_state) => {
                     let volume = loaded_state.config.volume;
+                    let shuffle_enabled = loaded_state.config.shuffle;
+                    let playlist_size = loaded_state.library.songs.len();
                     *self.state.lock().unwrap() = loaded_state;
 
                     // Set volume on playback backend
                     if let Some(playback) = &mut self.playback_backend {
                         playback.set_volume(volume);
+                    }
+
+                    // Initialize shuffle manager
+                    self.shuffle_manager.set_enabled(shuffle_enabled);
+                    if shuffle_enabled && playlist_size > 0 {
+                        self.shuffle_manager.initialize(playlist_size, None);
                     }
 
                     // Emit library loaded event
@@ -195,26 +207,56 @@ impl Application {
 
             PlaybackEvent::TrackFinished => {
                 // Auto-advance logic (if in playlist mode)
-                let state = self.state.lock().unwrap();
-                if let Some(current_idx) = state.playback.current_index {
-                    let next_idx = current_idx + 1;
-                    if next_idx < state.playback.playlist.len() {
-                        let next_song = state.playback.playlist[next_idx].clone();
-                        drop(state); // Release lock before emitting event
-
-                        // Update playlist index
-                        self.state.lock().unwrap().playback.current_index = Some(next_idx);
-
-                        self.event_tx
-                            .send(AppEvent::Playback(PlaybackEvent::PlayRequested {
-                                song: next_song,
-                            }))?;
+                let mut state = self.state.lock().unwrap();
+                if let Some(current_index) = state.ui.selected_index {
+                    // Initialize shuffle manager if it's enabled but empty
+                    if self.shuffle_manager.is_enabled() && self.shuffle_manager.remaining_in_pass() == 0 {
+                        self.shuffle_manager.initialize(state.library.songs.len(), Some(current_index));
                     }
+
+                    let next_index = if self.shuffle_manager.is_enabled() {
+                        // Use shuffle manager to get next index
+                        // In shuffle mode, when we reach the end of a pass, it auto-reshuffles
+                        self.shuffle_manager.next_index(Some(current_index), true)
+                    } else {
+                        // Sequential playback - check if we're at the end
+                        let next = current_index + 1;
+                        if next < state.library.songs.len() {
+                            Some(next)
+                        } else {
+                            // Optionally loop back to start in linear mode:
+                            // Some(0)
+                            // Or stop at the end:
+                            None
+                        }
+                    };
+
+                    if let Some(next_idx) = next_index {
+                        state.ui.selected_index = Some(next_idx);
+
+                        if let Some(song) = state.library.songs.get(next_idx).cloned() {
+                            drop(state);
+                            self.event_tx
+                                .send(AppEvent::Playback(PlaybackEvent::PlayRequested { song }))?;
+                        }
+                    }
+                    // If next_index is None, playback just stops (reached end of library in linear mode)
                 }
             }
 
+
             PlaybackEvent::VolumeChanged { volume } => {
                 playback.set_volume(*volume);
+
+                // Save to storage
+                if let Some(storage) = &self.storage_backend {
+                    let state = self.state.lock().unwrap();
+                    storage.save(&state)?;
+                }
+            }
+
+            PlaybackEvent::Shuffle { enabled: enabled_ } => {
+                // State already updated by apply_event
 
                 // Save to storage
                 if let Some(storage) = &self.storage_backend {
@@ -231,11 +273,25 @@ impl Application {
 
     fn handle_library_event(&mut self, event: &LibraryEvent) -> Result<()> {
         match event {
-            LibraryEvent::ScanCompleted { .. } => {
+            LibraryEvent::ScanCompleted { songs, .. } => {
+                // Update shuffle manager with new playlist size
+                self.shuffle_manager.update_playlist_size(songs.len());
+                if self.shuffle_manager.is_enabled() {
+                    self.shuffle_manager.initialize(songs.len(), None);
+                }
+
                 // Save to storage
                 if let Some(storage) = &self.storage_backend {
                     let state = self.state.lock().unwrap();
                     storage.save(&state)?;
+                }
+            }
+
+            LibraryEvent::LibraryLoaded { songs } => {
+                // Update shuffle manager when library is loaded
+                self.shuffle_manager.update_playlist_size(songs.len());
+                if self.shuffle_manager.is_enabled() {
+                    self.shuffle_manager.initialize(songs.len(), None);
                 }
             }
 
@@ -292,28 +348,49 @@ impl Application {
 
             UiEvent::NextTrackRequested => {
                 let mut state = self.state.lock().unwrap();
-                if let Some(index) = state.ui.selected_index {
-                    let next = (index + 1).min(state.library.songs.len().saturating_sub(1));
-                    state.ui.selected_index = Some(next);
+                if let Some(current_index) = state.ui.selected_index {
+                    // Initialize shuffle manager if it's enabled but empty
+                    if self.shuffle_manager.is_enabled() && self.shuffle_manager.remaining_in_pass() == 0 {
+                        self.shuffle_manager.initialize(state.library.songs.len(), Some(current_index));
+                    }
 
-                    if let Some(song) = state.library.songs.get(next).cloned() {
-                        drop(state);
-                        self.event_tx
-                            .send(AppEvent::Playback(PlaybackEvent::PlayRequested { song }))?;
+                    let next_index = if self.shuffle_manager.is_enabled() {
+                        self.shuffle_manager.next_index(Some(current_index), true) // TODO Maybe change that always loop
+                    } else {                                                                        // and make a loop option
+                                                                                                    // that works also on normal mode
+                        let next = (current_index + 1).min(state.library.songs.len().saturating_sub(1));
+                        Some(next)
+                    };
+
+                    if let Some(next_idx) = next_index {
+                        state.ui.selected_index = Some(next_idx);
+
+                        if let Some(song) = state.library.songs.get(next_idx).cloned() {
+                            drop(state);
+                            self.event_tx
+                                .send(AppEvent::Playback(PlaybackEvent::PlayRequested { song }))?;
+                        }
                     }
                 }
             }
 
             UiEvent::PreviousTrackRequested => {
                 let mut state = self.state.lock().unwrap();
-                if let Some(index) = state.ui.selected_index {
-                    let prev = index.saturating_sub(1);
-                    state.ui.selected_index = Some(prev);
+                if let Some(current_index) = state.ui.selected_index {
+                    let prev_index = if self.shuffle_manager.is_enabled() {
+                        self.shuffle_manager.previous_index(Some(current_index))
+                    } else {
+                        Some(current_index.saturating_sub(1))
+                    };
 
-                    if let Some(song) = state.library.songs.get(prev).cloned() {
-                        drop(state);
-                        self.event_tx
-                            .send(AppEvent::Playback(PlaybackEvent::PlayRequested { song }))?;
+                    if let Some(prev_idx) = prev_index {
+                        state.ui.selected_index = Some(prev_idx);
+
+                        if let Some(song) = state.library.songs.get(prev_idx).cloned() {
+                            drop(state);
+                            self.event_tx
+                                .send(AppEvent::Playback(PlaybackEvent::PlayRequested { song }))?;
+                        }
                     }
                 }
             }
@@ -380,8 +457,42 @@ impl Application {
             }
 
             UiEvent::ShuffleToggled { shuffle_enabled } => {
-                self.event_tx
-                    .send(AppEvent::Playback(PlaybackEvent::Shuffle{enabled: !shuffle_enabled }))?;
+                let new_state = !shuffle_enabled;
+
+                self.shuffle_manager.set_enabled(new_state);
+
+                // If enabling shuffle, initialize it with current state
+                if new_state {
+                    let state = self.state.lock().unwrap();
+                    let current_index = state.ui.selected_index;
+                    let playlist_size = state.library.songs.len();
+                    drop(state);
+
+                    self.shuffle_manager.initialize(playlist_size, current_index);
+                }
+
+                // Send event to update config and save
+                self.event_tx.send(AppEvent::Playback(PlaybackEvent::Shuffle {
+                    enabled: new_state
+                }))?;
+            }
+
+            UiEvent::ShuffleSet { enabled } => {
+                self.shuffle_manager.set_enabled(*enabled);
+
+                // If enabling shuffle, initialize it with current state
+                if *enabled {
+                    let state = self.state.lock().unwrap();
+                    let current_index = state.ui.selected_index;
+                    let playlist_size = state.library.songs.len();
+                    drop(state);
+
+                    self.shuffle_manager.initialize(playlist_size, current_index);
+                }
+
+                self.event_tx.send(AppEvent::Playback(PlaybackEvent::Shuffle {
+                    enabled: *enabled
+                }))?;
             }
 
             UiEvent::QuitRequested => {

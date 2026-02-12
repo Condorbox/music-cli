@@ -256,6 +256,8 @@ pub fn handle_shuffle(enabled: Option<bool>) -> Result<()> {
     let state = storage.load()?;
     let ui = TerminalRenderer::new();
 
+    let new_shuffle_state = enabled.unwrap_or(!state.config.shuffle);
+
     let mut app = Application::new()
         .with_playback_backend(Box::new(RodioBackend::new()?))
         .with_storage_backend(Box::new(storage))
@@ -263,18 +265,16 @@ pub fn handle_shuffle(enabled: Option<bool>) -> Result<()> {
 
     app.init()?;
 
-    let shuffle_enabled = enabled.unwrap_or(!state.config.shuffle);
-
-    app.event_sender().send(AppEvent::Playback(PlaybackEvent::Shuffle {
-        enabled: shuffle_enabled,
+    // Use ShuffleSet instead of ShuffleToggled
+    app.event_sender().send(AppEvent::Ui(UiEvent::ShuffleSet {
+        enabled: new_shuffle_state,
     }))?;
-    
-    app.run_once()?;
 
+    app.run_once()?;
     app.cleanup()?;
 
     let ui = TerminalRenderer::new();
-    ui.print_message(&format!("Shuffle set to: {}", shuffle_enabled));
+    ui.print_message(&format!("Shuffle set to: {}", new_shuffle_state));
 
     Ok(())
-}
+}   

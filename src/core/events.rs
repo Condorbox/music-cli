@@ -111,6 +111,9 @@ pub enum UiEvent {
 
     /// Shuffle toggled
     ShuffleToggled {shuffle_enabled: bool},
+
+    /// Set shuffle state explicitly (not toggle)
+    ShuffleSet { enabled: bool },
 }
 
 /// Type alias for event sender
