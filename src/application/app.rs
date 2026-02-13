@@ -139,14 +139,6 @@ impl Application {
             if let Some(ui) = &mut self.ui_renderer {
                 let state = self.state.lock().unwrap();
 
-                // Update TuiRenderer with full app state
-                if let Some(tui) = ui
-                    .as_any()
-                    .downcast_mut::<crate::modules::ui::tui::renderer::TuiRenderer>()
-                {
-                    tui.update_from_app_state(&state);
-                }
-
                 ui.update_state(&state);
                 ui.render(&state.ui)?;
             }

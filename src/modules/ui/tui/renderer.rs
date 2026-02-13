@@ -72,37 +72,6 @@ impl TuiRenderer {
         }
     }
 
-    pub fn update_from_app_state(&mut self, app_state: &crate::application::state::AppState) {
-        // Sync playback state
-        self.current_song = app_state.playback.current_song.clone();
-        self.is_paused = app_state.playback.is_paused;
-
-        // Sync search state from AppState
-        self.search_active = app_state.ui.search_active;
-        self.search_query = app_state.ui.search_query.clone();
-        self.search_results = app_state.ui.search_results.clone();
-
-        self.shuffle = app_state.config.shuffle;
-
-        // Update selected index
-        if let Some(index) = app_state.ui.selected_index {
-            // Map to display index (search results or full list)
-            if self.search_active && !self.search_results.is_empty() {
-                // Find position in search results
-                if let Some(pos) = self.search_results.iter().position(|(orig_idx, _)| *orig_idx == index) {
-                    self.list_state.borrow_mut().select(Some(pos));
-                }
-            } else {
-                self.list_state.borrow_mut().select(Some(index));
-            }
-        }
-
-        // Update temp volume
-        if !self.editing_field || self.settings_selected != SettingsField::Volume {
-            self.temp_volume = amplitude_to_volume(app_state.config.volume);
-        }
-    }
-
     fn draw_ui(&self, f: &mut Frame) {
         let base_constraints = if self.search_active {
             vec![
@@ -231,7 +200,7 @@ impl TuiRenderer {
             let shuffle_indicator = if self.shuffle {
                 " 🔀"
             } else {
-                ""
+                " ▶️"
             };
 
             vec![
@@ -636,6 +605,38 @@ impl UiRenderer for TuiRenderer {
         }
 
         Ok(events)
+    }
+
+    fn update_state(&mut self, app_state: &crate::application::state::AppState) {
+        // Sync playback state
+        self.current_song = app_state.playback.current_song.clone();
+        self.is_paused = app_state.playback.is_paused;
+
+        // Sync search state from AppState
+        self.search_active = app_state.ui.search_active;
+        self.search_query = app_state.ui.search_query.clone();
+        self.search_results = app_state.ui.search_results.clone();
+
+        // Sync shuffle state
+        self.shuffle = app_state.config.shuffle;
+
+        // Update selected index
+        if let Some(index) = app_state.ui.selected_index {
+            // Map to display index (search results or full list)
+            if self.search_active && !self.search_results.is_empty() {
+                // Find position in search results
+                if let Some(pos) = self.search_results.iter().position(|(orig_idx, _)| *orig_idx == index) {
+                    self.list_state.borrow_mut().select(Some(pos));
+                }
+            } else {
+                self.list_state.borrow_mut().select(Some(index));
+            }
+        }
+
+        // Update temp volume
+        if !self.editing_field || self.settings_selected != SettingsField::Volume {
+            self.temp_volume = amplitude_to_volume(app_state.config.volume);
+        }
     }
 
     fn as_any(&mut self) -> &mut dyn std::any::Any {
