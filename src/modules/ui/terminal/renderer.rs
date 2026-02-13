@@ -1,4 +1,4 @@
-use crate::application::state::UiState;
+use crate::application::state::{AppState, UiState};
 use crate::core::events::UiEvent;
 use crate::core::models::Song;
 use crate::core::traits::UiRenderer;
@@ -14,11 +14,15 @@ use std::time::Duration;
 
 pub struct TerminalRenderer {
     initialized: bool,
+    shuffle_enabled: bool,
 }
 
 impl TerminalRenderer {
     pub fn new() -> Self {
-        Self { initialized: false }
+        Self {
+            initialized: false,
+            shuffle_enabled: false
+        }
     }
 
     pub fn print_message(&self, message: &str) {
@@ -77,7 +81,15 @@ impl UiRenderer for TerminalRenderer {
             print!(" | ERROR: {}", error);
         }
 
-        print!(" | [Space: Pause | N: Next | B: Prev | Q: Quit]");
+        let shuffle_indicator = if self.shuffle_enabled {
+            "🔀   Shuffle"
+        } else {
+            "▶️   Linear"
+        };
+
+        print!(" | {}", shuffle_indicator);
+
+        print!(" | [Space: Pause | N: Next | B: Prev | R: Shuffle | Q: Quit]");
 
         stdout.flush()?;
         Ok(())
@@ -99,6 +111,11 @@ impl UiRenderer for TerminalRenderer {
                     KeyCode::Char('b') | KeyCode::Char('B') | KeyCode::Left => {
                         events.push(UiEvent::PreviousTrackRequested);
                     }
+                    KeyCode::Char('r') | KeyCode::Char('R') => {
+                        events.push(UiEvent::ShuffleToggled {
+                            shuffle_enabled: self.shuffle_enabled,
+                        });
+                    }
                     KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
                         events.push(UiEvent::QuitRequested);
                     }
@@ -112,6 +129,11 @@ impl UiRenderer for TerminalRenderer {
 
         Ok(events)
     }
+
+    fn update_state(&mut self, state: &AppState) {
+        self.shuffle_enabled = state.config.shuffle;
+    }
+
 
     fn as_any(&mut self) -> &mut dyn std::any::Any {
         self

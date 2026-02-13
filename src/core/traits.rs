@@ -62,6 +62,13 @@ pub trait UiRenderer: Send {
     /// Returns events generated from user input
     fn poll_input(&mut self) -> Result<Vec<UiEvent>>;
 
+    /// Update renderer with current app state before rendering
+    /// Default implementation does nothing
+    fn update_state(&mut self, _state: &AppState) {
+        
+    }
+
+
     /// Get as Any for downcasting (needed for renderer-specific updates)
     fn as_any(&mut self) -> &mut dyn std::any::Any;
 }

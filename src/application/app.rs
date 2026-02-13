@@ -147,6 +147,7 @@ impl Application {
                     tui.update_from_app_state(&state);
                 }
 
+                ui.update_state(&state);
                 ui.render(&state.ui)?;
             }
 
