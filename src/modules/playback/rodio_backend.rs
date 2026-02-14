@@ -4,11 +4,16 @@ use anyhow::{Result, Context};
 use rodio::{Decoder, OutputStream, Sink};
 use std::fs::File;
 use std::io::BufReader;
+use std::time::{Duration, Instant};
 
 pub struct RodioBackend {
     sink: Sink,
     current_song: Option<Song>,
     is_paused: bool,
+
+    // Track playback position
+    playback_start: Option<Instant>,
+    pause_elapsed: Duration,
 }
 
 impl RodioBackend {
@@ -26,6 +31,8 @@ impl RodioBackend {
             sink,
             current_song: None,
             is_paused: false,
+            playback_start: None,
+            pause_elapsed: Duration::from_secs(0),
         })
     }
 }
@@ -42,6 +49,10 @@ impl PlaybackBackend for RodioBackend {
         self.current_song = Some(song.clone());
         self.is_paused = false;
 
+        // Reset position tracking
+        self.playback_start = Some(Instant::now());
+        self.pause_elapsed = Duration::from_secs(0);
+
         self.sink.play();
 
         Ok(())
@@ -51,12 +62,20 @@ impl PlaybackBackend for RodioBackend {
         self.sink.stop();
         self.current_song = None;
         self.is_paused = false;
+        self.playback_start = None;
+        self.pause_elapsed = Duration::from_secs(0);
     }
 
     fn pause(&mut self) {
         if self.current_song.is_some() && !self.is_paused {
+            // Capture current position before pausing
+            if let Some(start) = self.playback_start {
+                self.pause_elapsed += start.elapsed();
+            }
+
             self.sink.pause();
             self.is_paused = true;
+            self.playback_start = None; // Stop tracking time while paused
         }
     }
 
@@ -64,6 +83,7 @@ impl PlaybackBackend for RodioBackend {
         if self.current_song.is_some() && self.is_paused {
             self.sink.play();
             self.is_paused = false;
+            self.playback_start = Some(Instant::now()); // Resume time tracking
         }
     }
 
@@ -90,6 +110,19 @@ impl PlaybackBackend for RodioBackend {
     fn volume(&self) -> f32 {
         self.sink.volume()
     }
+
+    fn position(&self) -> Duration {
+        if let Some(start) = self.playback_start {
+            if self.is_paused {
+                self.pause_elapsed
+            } else {
+                self.pause_elapsed + start.elapsed()
+            }
+        } else {
+            Duration::from_secs(0)
+        }
+    }
+
 }
 
 // To avoid leaks

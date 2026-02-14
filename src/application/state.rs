@@ -1,6 +1,7 @@
 use crate::core::models::Song;
 use crate::core::events::*;
 use std::path::PathBuf;
+use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 /// Complete application state (single source of truth)
@@ -50,6 +51,9 @@ pub struct PlaybackState {
 
     #[serde(skip)]
     pub current_index: Option<usize>,
+
+    #[serde(skip)]
+    pub current_elapsed: Duration,
 }
 
 #[derive(Debug, Clone)]
@@ -97,6 +101,7 @@ impl Default for AppState {
                 volume: 1.0,
                 playlist: Vec::new(),
                 current_index: None,
+                current_elapsed: Duration::from_secs(0),
             },
             ui: UiState {
                 selected_index: None,

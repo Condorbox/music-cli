@@ -127,8 +127,15 @@ impl Application {
                 }
             }
 
-            // Check playback state
-            if let Some(playback) = &mut self.playback_backend {
+            // Update playback position if playing (for progress bar)
+            if let Some(playback) = &self.playback_backend {
+                if playback.is_playing() && !playback.is_paused() {
+                    // Get position from playback backend and update state
+                    let position = playback.position();
+                    self.state.lock().unwrap().playback.current_elapsed = position;
+                }
+
+                // Check if track finished
                 if playback.has_finished() {
                     self.event_tx
                         .send(AppEvent::Playback(PlaybackEvent::TrackFinished))?;

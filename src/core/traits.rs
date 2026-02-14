@@ -1,3 +1,4 @@
+use std::time::Duration;
 use crate::application::state::{AppState, UiState};
 use crate::core::events::UiEvent;
 use crate::core::models::Song;
@@ -36,6 +37,12 @@ pub trait PlaybackBackend: Send {
 
     /// Get volume
     fn volume(&self) -> f32;
+
+    /// Get current playback position (elapsed time)
+    /// Returns Duration::ZERO if not playing
+    fn position(&self) -> Duration {
+        Duration::ZERO
+    }
 }
 
 /// Abstraction for persistent storage
@@ -67,8 +74,7 @@ pub trait UiRenderer: Send {
     fn update_state(&mut self, _state: &AppState) {
         
     }
-
-
+    
     /// Get as Any for downcasting (needed for renderer-specific updates)
     fn as_any(&mut self) -> &mut dyn std::any::Any;
 }

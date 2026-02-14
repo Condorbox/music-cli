@@ -1,6 +1,7 @@
 use crate::application::state::UiState;
 use crate::core::events::UiEvent;
 use crate::core::traits::UiRenderer;
+use crate::modules::ui::progress_formatter::format_duration;
 use anyhow::Result;
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
@@ -12,12 +13,13 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Clear, Gauge, List, ListItem, ListState, Paragraph},
     Frame, Terminal,
 };
 use std::cell::RefCell;
 use std::io::{stdout, Stdout};
 use std::time::Duration;
+use crate::modules::playback::playback_progress::PlaybackProgress;
 use crate::utils::{amplitude_to_volume, APP_NAME};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -33,6 +35,7 @@ pub struct TuiRenderer {
     // Display state (synced from AppState)
     songs: Vec<crate::core::models::Song>,
     current_song: Option<crate::core::models::Song>,
+    current_elapsed: Duration, // Synced from AppState.playback.current_elapsed
     is_paused: bool,
     search_active: bool,
     search_query: String,
@@ -58,6 +61,7 @@ impl TuiRenderer {
             search_query: String::new(),
             search_results: Vec::new(),
             shuffle: false,
+            current_elapsed: Duration::from_secs(0),
             show_settings: false,
             settings_selected: SettingsField::Volume,
             temp_volume: 100,
@@ -77,14 +81,14 @@ impl TuiRenderer {
             vec![
                 Constraint::Length(3), // Header
                 Constraint::Min(0),    // Main content
-                Constraint::Length(4), // Now playing
+                Constraint::Length(5), // Now playing (with progress bar)
                 Constraint::Length(3), // Search bar
             ]
         } else {
             vec![
                 Constraint::Length(3), // Header
                 Constraint::Min(0),    // Main content
-                Constraint::Length(4), // Now playing
+                Constraint::Length(5), // Now playing (with progress bar)
                 Constraint::Length(3), // Controls
             ]
         };
@@ -190,7 +194,28 @@ impl TuiRenderer {
     }
 
     fn draw_now_playing(&self, f: &mut Frame, area: Rect) {
-        let content = if let Some(song) = &self.current_song {
+        // Create the main block container
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(" Now Playing ");
+
+        // Calculate the inner area (inside the borders)
+        let inner_area = block.inner(area);
+
+        // Render the block borders first
+        f.render_widget(block, area);
+
+        // Split the inner area: Top for Song Info, Bottom for Progress Bar
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(1),    // Text takes remaining space
+                Constraint::Length(1), // Progress bar takes 1 line
+            ])
+            .split(inner_area);
+
+        // Logic for Song Info (Top Chunk)
+        if let Some(song) = &self.current_song {
             let status = if self.is_paused {
                 "⏸ PAUSED"
             } else {
@@ -203,12 +228,12 @@ impl TuiRenderer {
                 " ▶️"
             };
 
-            vec![
+            let text_content = vec![
                 Line::from(vec![
                     Span::styled(
                         status,
                         Style::default()
-                            .fg(Color::Green)
+                            .fg(if self.is_paused { Color::Yellow } else { Color::Green })
                             .add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(
@@ -218,16 +243,62 @@ impl TuiRenderer {
                     Span::raw("  "),
                     Span::styled(&song.title, Style::default().fg(Color::Yellow)),
                 ]),
-            ]
+                Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(
+                        song.artist.as_deref().unwrap_or("Unknown Artist"),
+                        Style::default().fg(Color::Cyan),
+                    ),
+                    Span::raw(" • "),
+                    Span::styled(
+                        song.album.as_deref().unwrap_or("Unknown Album"),
+                        Style::default().fg(Color::Magenta),
+                    ),
+                ]),
+            ];
+
+            f.render_widget(Paragraph::new(text_content), chunks[0]);
+
+            // Spotify-style Progress Bar (Bottom Chunk): [elapsed] [bar] [total]
+            if let Some(duration) = song.duration {
+                if let Some(progress) = PlaybackProgress::new(self.current_elapsed, duration) {
+                    let elapsed_str = format_duration(progress.elapsed());
+                    let total_str = format_duration(progress.total());
+
+                    // Split horizontally: elapsed | padding | bar | padding | total
+                    let progress_chunks = Layout::default()
+                        .direction(Direction::Horizontal)
+                        .constraints([
+                            Constraint::Length(elapsed_str.len() as u16), // Elapsed time
+                            Constraint::Length(1),                         // Left padding
+                            Constraint::Min(1),                            // Bar takes remaining
+                            Constraint::Length(1),                         // Right padding
+                            Constraint::Length(total_str.len() as u16),  // Total time
+                        ])
+                        .split(chunks[1]);
+
+                    // Elapsed time (left)
+                    let elapsed_widget = Paragraph::new(elapsed_str)
+                        .style(Style::default().fg(Color::White));
+                    f.render_widget(elapsed_widget, progress_chunks[0]);
+
+                    // Progress bar (center) - NO LABEL, just the bar
+                    let gauge = Gauge::default()
+                        .gauge_style(Style::default().fg(Color::LightBlue).bg(Color::DarkGray))
+                        .ratio(progress.ratio())
+                        .use_unicode(true)
+                        .label(""); // No percentage
+                    f.render_widget(gauge, progress_chunks[2]);
+
+                    // Total time (right)
+                    let total_widget = Paragraph::new(total_str)
+                        .style(Style::default().fg(Color::Gray));
+                    f.render_widget(total_widget, progress_chunks[4]);
+                }
+            }
         } else {
-            vec![Line::from("No song playing")]
-        };
-        let paragraph = Paragraph::new(content).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" Now Playing "),
-        );
-        f.render_widget(paragraph, area);
+            f.render_widget(Paragraph::new(vec![Line::from("No song playing")]), chunks[0]);
+        }
     }
 
     fn draw_controls(&self, f: &mut Frame, area: Rect) {
@@ -610,6 +681,7 @@ impl UiRenderer for TuiRenderer {
     fn update_state(&mut self, app_state: &crate::application::state::AppState) {
         // Sync playback state
         self.current_song = app_state.playback.current_song.clone();
+        self.current_elapsed = app_state.playback.current_elapsed;
         self.is_paused = app_state.playback.is_paused;
 
         // Sync search state from AppState
