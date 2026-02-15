@@ -13,6 +13,8 @@ pub struct Song {
     pub album: Option<String>,
     pub track_number: Option<u32>,
     pub duration: Option<std::time::Duration>,
+
+    pub search_key: String,
 }
 
 impl Song {
@@ -30,29 +32,51 @@ impl Song {
         format!("{}:{:02}", mins, secs)
     }
 
+    fn generate_search_key(title: &str, artist: Option<&str>, album: Option<&str>) -> String {
+        // We combine Title, Artist, and Album into one string.
+        // This allows a query like "Pink Floyd Wall" to match effectively.
+        format!("{} {} {}",
+                title,
+                artist.unwrap_or_default(),
+                album.unwrap_or_default()
+        ).to_lowercase()
+    }
+
     fn extract_metadata(path: &Path) -> anyhow::Result<Self> {
         let tagged_file = Probe::open(path)?.read()?;
         let tag = tagged_file.primary_tag().or_else(|| tagged_file.first_tag());
+        let title = tag.and_then(|t| t.title().map(|s| s.into_owned()))
+            .unwrap_or_else(|| Self::extract_filename(path));
+        let artist = tag.and_then(|t| t.artist().map(|s| s.into_owned()));
+        let album = tag.and_then(|t| t.album().map(|s| s.into_owned()));
+        let track_number = tag.and_then(|t| t.track());
+        let duration = Some(tagged_file.properties().duration());
+
+        let search_key = Self::generate_search_key(&title, artist.as_deref(), album.as_deref());
 
         Ok(Song {
             path: path.to_path_buf(),
-            title: tag.and_then(|t| t.title().map(|s| s.into_owned()))
-                .unwrap_or_else(|| Self::extract_filename(path)),
-            artist: tag.and_then(|t| t.artist().map(|s| s.into_owned())),
-            album: tag.and_then(|t| t.album().map(|s| s.into_owned())),
-            track_number: tag.and_then(|t| t.track()),
-            duration: Some(tagged_file.properties().duration()),
+            title,
+            artist,
+            album,
+            track_number,
+            duration,
+            search_key,
         })
     }
 
     fn fallback(path: &Path) -> Self {
+        let title = Self::extract_filename(path);
+        let search_key = title.to_lowercase();
+
         Song {
             path: path.to_path_buf(),
-            title: Self::extract_filename(path),
+            title,
             artist: None,
             album: None,
             track_number: None,
             duration: None,
+            search_key,
         }
     }
 

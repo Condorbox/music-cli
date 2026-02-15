@@ -4,11 +4,11 @@ use fuzzy_matcher::FuzzyMatcher;
 
 /// Result of a fuzzy search operation
 #[derive(Debug, Clone)]
-pub struct SearchResult {
+pub struct SearchResult<'a> {
     /// Original index in the full library
     pub index: usize,
     /// The matched song
-    pub song: Song,
+    pub song: &'a Song,
     /// Match score (higher is better)
     pub score: i64,
 }
@@ -35,18 +35,20 @@ impl SearchEngine {
     ///
     /// # Returns
     /// Vector of SearchResult, sorted by score (descending)
-    pub fn search(&self, library: &[Song], query: &str) -> Vec<SearchResult> {
+    pub fn search<'a>(&self, library: &'a [Song], query: &str) -> Vec<SearchResult<'a>> {
         if query.is_empty() {
             return Vec::new();
         }
+
+        let query_lower = query.to_lowercase();
 
         let mut results: Vec<SearchResult> = library
             .iter()
             .enumerate()
             .filter_map(|(index, song)| {
-                self.score_song(song, query).map(|score| SearchResult {
+                self.score_song(song, &query_lower).map(|score| SearchResult {
                     index,
-                    song: song.clone(),
+                    song, 
                     score,
                 })
             })
@@ -76,24 +78,17 @@ impl SearchEngine {
             .filter_map(|&s| s)
             .max();
 
-        // Also try matching against combined text (fallback)
-        let combined_text = format!(
-            "{} {} {}",
-            song.title,
-            song.artist.as_deref().unwrap_or(""),
-            song.album.as_deref().unwrap_or("")
-        );
-        let combined_score = self.matcher.fuzzy_match(&combined_text, query);
+        let combined_score = self.matcher.fuzzy_match(&song.search_key, query);
 
         // Return the best score we found
         best_field_score.or(combined_score)
     }
 
-    /// Converts SearchResult to (index, Song) tuples
-    pub fn search_result_to_song_index(&self, search_results: Vec<SearchResult>) -> Vec<(usize, Song)> {
+    /// Converts SearchResult to (index, Song) tuples by cloning
+    pub fn search_result_to_song_index(&self, search_results: Vec<SearchResult<'_>>) -> Vec<(usize, Song)> {
         search_results
             .into_iter()
-            .map(|result| (result.index, result.song))
+            .map(|result| (result.index, result.song.clone()))
             .collect()
     }
 }
