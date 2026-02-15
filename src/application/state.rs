@@ -124,6 +124,7 @@ impl AppState {
                     self.playback.current_song = Some(song.clone());
                     self.playback.is_playing = true;
                     self.playback.is_paused = false;
+                    self.playback.current_index = self.ui.selected_index;
                     self.ui.status_message = format!("Playing: {}", song.title);
                     self.ui.error_message = None;
                 }

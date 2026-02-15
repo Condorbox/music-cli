@@ -206,21 +206,19 @@ impl Application {
             }
 
             PlaybackEvent::TrackFinished => {
-                // Auto-advance logic (if in playlist mode)
                 let mut state = self.state.lock().unwrap();
-                if let Some(current_index) = state.ui.selected_index {
-                    // Initialize shuffle manager if it's enabled but empty
-                    if self.shuffle_manager.is_enabled() && self.shuffle_manager.remaining_in_pass() == 0 {
-                        self.shuffle_manager.initialize(state.library.songs.len(), Some(current_index));
-                    }
 
+                if let Some(current_index) = state.playback.current_index {
                     let next_index = if self.shuffle_manager.is_enabled() {
-                        // Use shuffle manager to get next index
-                        // In shuffle mode, when we reach the end of a pass, it auto-reshuffles
+                        // Shuffle mode: use shuffle manager
+                        if self.shuffle_manager.remaining_in_pass() == 0 {
+                            self.shuffle_manager.initialize(state.library.songs.len(), Some(current_index));
+                        }
                         self.shuffle_manager.next_index(Some(current_index), true)
                     } else {
                         // Sequential playback - check if we're at the end
                         let next = current_index + 1;
+
                         if next < state.library.songs.len() {
                             Some(next)
                         } else {
