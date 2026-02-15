@@ -224,8 +224,14 @@ impl AppState {
                         self.ui.search_results.clear();
                         self.ui.status_message = "Search cleared".to_string();
 
-                        // Reset to first song
-                        if !self.library.songs.is_empty() {
+                        if let Some(playing_index) = self.playback.current_index {
+                            // If something is playing, jump to that song
+                            self.ui.selected_index = Some(playing_index);
+                        } else if let Some(selected) = self.ui.selected_index {
+                            // If nothing is playing, but we had a selection, keep it
+                            self.ui.selected_index = Some(selected);
+                        } else if !self.library.songs.is_empty() {
+                            // Go to first song
                             self.ui.selected_index = Some(0);
                         }
                     } else {
