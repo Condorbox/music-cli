@@ -1,6 +1,6 @@
 use crate::application::app::Application;
 use crate::core::events::*;
-use crate::core::models::Song;
+use crate::core::models::{RepeatMode, Song};
 use crate::modules::library::scanner;
 use crate::modules::playback::rodio_backend::RodioBackend;
 use crate::modules::storage::json_backend::JsonStorageBackend;
@@ -277,4 +277,46 @@ pub fn handle_shuffle(enabled: Option<bool>) -> Result<()> {
     ui.print_message(&format!("Shuffle set to: {}", new_shuffle_state));
 
     Ok(())
-}   
+}
+
+pub fn handle_loop(mode: Option<RepeatMode>) -> Result<()> {
+    let storage = JsonStorageBackend::new()?;
+    let state = storage.load()?;
+    let ui = TerminalRenderer::new();
+
+    let new_mode = match mode {
+        Some(explicit) => explicit,
+        None => state.config.repeat.cycle(),
+    };
+
+    let mut app = Application::new()
+        .with_playback_backend(Box::new(RodioBackend::new()?))
+        .with_storage_backend(Box::new(storage))
+        .with_ui_renderer(Box::new(ui));
+
+    app.init()?;
+
+    app.event_sender()
+        .send(AppEvent::Playback(PlaybackEvent::RepeatChanged { mode: new_mode }))?;
+
+    app.run_once()?;
+    app.cleanup()?;
+
+    let ui = TerminalRenderer::new();
+    ui.print_message(&format!(
+        "Repeat mode set to: {} {}",
+        new_mode.symbol(),
+        repeat_mode_description(new_mode),
+    ));
+
+    Ok(())
+}
+
+/// Human-readable label used in terminal feedback messages.
+fn repeat_mode_description(mode: RepeatMode) -> &'static str {
+    match mode {
+        RepeatMode::Off => "(stop at end)",
+        RepeatMode::All => "(loop playlist)",
+        RepeatMode::One => "(repeat current song)",
+    }
+}

@@ -1,6 +1,7 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
-
+use clap::builder::PossibleValue;
+use crate::core::models::RepeatMode;
 use crate::utils::APP_NAME;
 
 #[derive(Parser)]
@@ -62,4 +63,25 @@ pub enum Commands {
         #[arg(value_parser = clap::value_parser!(bool))]
         enabled: Option<bool>,
     },
+
+    /// Set repeat mode (off/all/one). Cycles to the next mode if no argument given
+    Loop {
+        /// Repeat mode: off, all, one. If omitted, cycles to the next mode
+        #[arg(value_enum)]
+        mode: Option<RepeatMode>,
+    },
+}
+
+impl ValueEnum for RepeatMode {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[Self::Off, Self::All, Self::One]
+    }
+
+    fn to_possible_value(&self) -> Option<PossibleValue> {
+        match self {
+            Self::Off => Some(PossibleValue::new("off").help("Stop at the end of the playlist")),
+            Self::All => Some(PossibleValue::new("all").help("Loop the entire playlist")),
+            Self::One => Some(PossibleValue::new("one").help("Repeat the current song")),
+        }
+    }
 }

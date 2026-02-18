@@ -24,5 +24,6 @@ fn main() -> Result<()> {
         Commands::Search { query } => cli_handlers::handle_search(query),
         Commands::Volume { volume } => cli_handlers::handle_volume(volume),
         Commands::Shuffle { enabled } => cli_handlers::handle_shuffle(enabled),
+        Commands::Loop { mode } => cli_handlers::handle_loop(mode),
     }
 }
