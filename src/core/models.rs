@@ -106,3 +106,38 @@ impl fmt::Display for Song {
         )
     }
 }
+
+/// Controls how playback behaves when a track finishes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum RepeatMode {
+    /// Stop playback at the end of the queue.
+    #[default]
+    Off,
+
+    /// Loop the entire playlist indefinitely.
+    All,
+
+    /// Repeat the current song indefinitely.
+    One,
+}
+
+impl RepeatMode {
+    /// Cycle to the next mode in order: Off → All → One → Off.
+    pub fn cycle(&self) -> Self {
+        match self {
+            Self::Off => Self::All,
+            Self::All => Self::One,
+            Self::One => Self::Off,
+        }
+    }
+
+    /// Display symbol for UI rendering.
+    pub fn symbol(&self) -> &'static str {
+        match self {
+            Self::Off => "⭯",
+            Self::All => "🔁",
+            Self::One => "🔂",
+        }
+    }
+}
+

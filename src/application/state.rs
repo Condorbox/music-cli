@@ -1,4 +1,4 @@
-use crate::core::models::Song;
+use crate::core::models::{RepeatMode, Song};
 use crate::core::events::*;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -20,6 +20,7 @@ pub struct ConfigState {
     pub root_path: Option<PathBuf>,
     pub volume: f32,
     pub shuffle: bool,
+    pub repeat: RepeatMode,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,6 +89,7 @@ impl Default for AppState {
                 root_path: None,
                 volume: 1.0,
                 shuffle: false,
+                repeat: RepeatMode::default(),
             },
             library: LibraryState {
                 songs: Vec::new(),
@@ -157,6 +159,9 @@ impl AppState {
                 }
                 PlaybackEvent::Shuffle { enabled} => {
                     self.config.shuffle = *enabled;
+                }
+                PlaybackEvent::RepeatChanged { mode } => {
+                    self.config.repeat = *mode;
                 }
                 _ => {}
             },

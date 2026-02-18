@@ -5,6 +5,7 @@ use anyhow::Result;
 use crossbeam_channel::bounded;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use crate::core::models::RepeatMode;
 use crate::modules::library::search_engine::SearchEngine;
 use crate::modules::playback::shuffle_manager::ShuffleManager;
 use crate::utils::volume_percent_to_amplitude;
@@ -206,42 +207,8 @@ impl Application {
             }
 
             PlaybackEvent::TrackFinished => {
-                let mut state = self.state.lock().unwrap();
-
-                if let Some(current_index) = state.playback.current_index {
-                    let next_index = if self.shuffle_manager.is_enabled() {
-                        // Shuffle mode: use shuffle manager
-                        if self.shuffle_manager.remaining_in_pass() == 0 {
-                            self.shuffle_manager.initialize(state.library.songs.len(), Some(current_index));
-                        }
-                        self.shuffle_manager.next_index(Some(current_index), true)
-                    } else {
-                        // Sequential playback - check if we're at the end
-                        let next = current_index + 1;
-
-                        if next < state.library.songs.len() {
-                            Some(next)
-                        } else {
-                            // Optionally loop back to start in linear mode:
-                            // Some(0)
-                            // Or stop at the end:
-                            None
-                        }
-                    };
-
-                    if let Some(next_idx) = next_index {
-                        state.ui.selected_index = Some(next_idx);
-
-                        if let Some(song) = state.library.songs.get(next_idx).cloned() {
-                            drop(state);
-                            self.event_tx
-                                .send(AppEvent::Playback(PlaybackEvent::PlayRequested { song }))?;
-                        }
-                    }
-                    // If next_index is None, playback just stops (reached end of library in linear mode)
-                }
+                self.handle_track_finished()?;
             }
-
 
             PlaybackEvent::VolumeChanged { volume } => {
                 playback.set_volume(*volume);
@@ -263,11 +230,107 @@ impl Application {
                 }
             }
 
+            PlaybackEvent::RepeatChanged { mode: _mode } => {
+                // State already updated by apply_event
+
+                // Save to storage
+                if let Some(storage) = &self.storage_backend {
+                    let state = self.state.lock().unwrap();
+                    storage.save(&state)?;
+                }
+            }
+
             _ => {}
         }
 
         Ok(())
     }
+
+    fn handle_track_finished(&mut self) -> Result<()> {
+        let state = self.state.lock().unwrap();
+        let repeat = state.config.repeat;
+        let current_index = state.playback.current_index;
+        let library_len = state.library.songs.len();
+        drop(state);
+
+        match repeat {
+            // Repeat the same song immediately.
+            RepeatMode::One => {
+                if let Some(idx) = current_index {
+                    let song = self
+                        .state
+                        .lock()
+                        .unwrap()
+                        .library
+                        .songs
+                        .get(idx)
+                        .cloned();
+
+                    if let Some(song) = song {
+                        self.event_tx
+                            .send(AppEvent::Playback(PlaybackEvent::PlayRequested { song }))?;
+                    }
+                }
+            }
+
+            // Advance to the next track; loop playlist when exhausted.
+            RepeatMode::All => {
+                self.advance_to_next(current_index, library_len, true)?;
+            }
+
+            // Advance to the next track; stop when the end is reached.
+            RepeatMode::Off => {
+                self.advance_to_next(current_index, library_len, false)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn advance_to_next(
+        &mut self,
+        current_index: Option<usize>,
+        library_len: usize,
+        loop_playlist: bool,
+    ) -> Result<()> {
+        let next_index = if self.shuffle_manager.is_enabled() {
+            if self.shuffle_manager.remaining_in_pass() == 0 {
+                self.shuffle_manager
+                    .initialize(library_len, current_index);
+            }
+            self.shuffle_manager
+                .next_index(current_index, loop_playlist)
+        } else {
+            match current_index {
+                Some(idx) => {
+                    let next = idx + 1;
+                    if next < library_len {
+                        Some(next)
+                    } else if loop_playlist {
+                        Some(0)
+                    } else {
+                        None
+                    }
+                }
+                None => None,
+            }
+        };
+
+        if let Some(next_idx) = next_index {
+            let mut state = self.state.lock().unwrap();
+            state.ui.selected_index = Some(next_idx);
+            let song = state.library.songs.get(next_idx).cloned();
+            drop(state);
+
+            if let Some(song) = song {
+                self.event_tx
+                    .send(AppEvent::Playback(PlaybackEvent::PlayRequested { song }))?;
+            }
+        }
+
+        Ok(())
+    }
+
 
     fn handle_library_event(&mut self, event: &LibraryEvent) -> Result<()> {
         match event {

@@ -1,4 +1,4 @@
-use crate::core::models::Song;
+use crate::core::models::{RepeatMode, Song};
 use std::path::PathBuf;
 
 /// All events that can occur in the application
@@ -45,6 +45,9 @@ pub enum PlaybackEvent {
 
     /// Shuffle enabled or disabled
     Shuffle { enabled: bool },
+
+    /// Repeat mode changed.
+    RepeatChanged { mode: RepeatMode },
 }
 
 #[derive(Debug, Clone)]
