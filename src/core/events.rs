@@ -117,6 +117,9 @@ pub enum UiEvent {
 
     /// Set shuffle state explicitly (not toggle)
     ShuffleSet { enabled: bool },
+
+    /// Set repeat mode explicitly
+    RepeatChangeRequested { mode: RepeatMode },
 }
 
 /// Type alias for event sender

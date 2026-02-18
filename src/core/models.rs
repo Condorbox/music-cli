@@ -130,6 +130,15 @@ impl RepeatMode {
             Self::One => Self::Off,
         }
     }
+    
+    /// Cycle to the previous mode in order: Off → One → All → Off.
+    pub fn cycle_back(&self) -> Self {
+        match self {
+            Self::Off => Self::One,
+            Self::All => Self::Off,
+            Self::One => Self::All,
+        }
+    }
 
     /// Display symbol for UI rendering.
     pub fn symbol(&self) -> &'static str {

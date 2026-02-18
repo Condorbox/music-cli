@@ -19,13 +19,21 @@ use ratatui::{
 use std::cell::RefCell;
 use std::io::{stdout, Stdout};
 use std::time::Duration;
+use crate::core::models::RepeatMode;
 use crate::modules::playback::playback_progress::PlaybackProgress;
 use crate::utils::{amplitude_to_volume, APP_NAME};
+
+const SETTINGS_FIELDS: &[SettingsField] = &[
+    SettingsField::Volume,
+    SettingsField::Repeat,
+    SettingsField::MusicPath,
+];
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum SettingsField {
     MusicPath,
     Volume,
+    Repeat
 }
 
 pub struct TuiRenderer {
@@ -46,6 +54,7 @@ pub struct TuiRenderer {
     show_settings: bool,
     settings_selected: SettingsField,
     temp_volume: u8,
+    temp_repeat: RepeatMode,
     editing_field: bool,
 }
 
@@ -65,6 +74,7 @@ impl TuiRenderer {
             show_settings: false,
             settings_selected: SettingsField::Volume,
             temp_volume: 100,
+            temp_repeat: RepeatMode::default(),
             editing_field: false,
         }
     }
@@ -341,68 +351,100 @@ impl TuiRenderer {
     }
 
     fn draw_settings_modal(&self, f: &mut Frame) {
-        let area = centered_rect(60, 40, f.area());
+        let area = centered_rect(60, 50, f.area());
         f.render_widget(Clear, area);
+        f.render_widget(
+            Block::default()
+                .title(" ⚙ Settings ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow)),
+            area,
+        );
 
-        let block = Block::default()
-            .title(" ⚙ Settings ")
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Yellow));
-        f.render_widget(block, area);
-
-        let inner_area = Rect {
+        let inner = Rect {
             x: area.x + 2,
             y: area.y + 2,
             width: area.width.saturating_sub(4),
             height: area.height.saturating_sub(4),
         };
 
+        // One row per settings field + a spacer + help line.
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),
-                Constraint::Length(3),
-                Constraint::Min(0),
-                Constraint::Length(2),
+                Constraint::Length(3), // Volume
+                Constraint::Length(3), // Repeat
+                Constraint::Length(3), // Music Path
+                Constraint::Min(0),    // spacer
+                Constraint::Length(2), // help
             ])
-            .split(inner_area);
+            .split(inner);
 
-        let volume_style = if self.settings_selected == SettingsField::Volume {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(Color::White)
-        };
+        self.draw_settings_volume(f, chunks[0]);
+        self.draw_settings_repeat(f, chunks[1]);
+        self.draw_settings_path(f, chunks[2]);
+        self.draw_settings_help(f, chunks[4]);
+    }
 
-        let volume_text = if self.editing_field && self.settings_selected == SettingsField::Volume {
-            format!("Volume: {}% [EDITING - Use ←/→ or 0-9, Enter to confirm]", self.temp_volume)
+    fn draw_settings_volume(&self, f: &mut Frame, area: Rect) {
+        let selected = self.settings_selected == SettingsField::Volume;
+        let editing = selected && self.editing_field;
+
+        let label = if editing {
+            format!("Volume: {}%  [←/→ adjust • 0-9 type • Enter confirm • Esc cancel]", self.temp_volume)
         } else {
             format!("Volume: {}%", self.temp_volume)
         };
 
-        f.render_widget(Paragraph::new(volume_text).style(volume_style), chunks[0]);
+        f.render_widget(
+            Paragraph::new(label).style(field_style(selected)),
+            area,
+        );
+    }
 
-        let path_style = if self.settings_selected == SettingsField::MusicPath {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+    fn draw_settings_repeat(&self, f: &mut Frame, area: Rect) {
+        let selected = self.settings_selected == SettingsField::Repeat;
+
+        let label = if selected {
+            format!(
+                "Repeat: {} {}  [←/→ or Enter to cycle]",
+                self.temp_repeat.symbol(),
+                repeat_label(self.temp_repeat),
+            )
         } else {
-            Style::default().fg(Color::Gray)
+            format!(
+                "Repeat: {} {}",
+                self.temp_repeat.symbol(),
+                repeat_label(self.temp_repeat),
+            )
         };
 
         f.render_widget(
-            Paragraph::new("Music Path: [Press Enter to change] (Coming soon)").style(path_style),
-            chunks[1]
+            Paragraph::new(label).style(field_style(selected)),
+            area,
         );
+    }
 
-        let help_text = if self.editing_field {
+    fn draw_settings_path(&self, f: &mut Frame, area: Rect) {
+        let selected = self.settings_selected == SettingsField::MusicPath;
+        f.render_widget(
+            Paragraph::new("Music Path: [coming soon]").style(field_style(selected)),
+            area,
+        );
+    }
+
+    fn draw_settings_help(&self, f: &mut Frame, area: Rect) {
+        let text = if self.editing_field {
             "←/→: Adjust • 0-9: Type value • Enter: Confirm • Esc: Cancel"
         } else {
-            "↑/↓: Navigate • Enter: Edit • s/Esc: Close"
+            "↑/↓: Navigate fields • Enter: Edit • s/Esc: Close"
         };
 
         f.render_widget(
-            Paragraph::new(help_text)
+            Paragraph::new(text)
                 .style(Style::default().fg(Color::DarkGray))
                 .alignment(Alignment::Center),
-            chunks[3]
+            area,
         );
     }
 
@@ -462,26 +504,31 @@ impl TuiRenderer {
         self.get_original_index(new_idx)
     }
 
+    fn settings_navigate_up(&mut self) {
+        let current = SETTINGS_FIELDS
+            .iter()
+            .position(|f| *f == self.settings_selected)
+            .unwrap_or(0);
+        let prev = (current + SETTINGS_FIELDS.len() - 1) % SETTINGS_FIELDS.len();
+        self.settings_selected = SETTINGS_FIELDS[prev];
+    }
+
+    fn settings_navigate_down(&mut self) {
+        let current = SETTINGS_FIELDS
+            .iter()
+            .position(|f| *f == self.settings_selected)
+            .unwrap_or(0);
+        let next = (current + 1) % SETTINGS_FIELDS.len();
+        self.settings_selected = SETTINGS_FIELDS[next];
+    }
+
+
     fn get_original_index(&self, display_idx: usize) -> Option<usize> {
         if self.search_active {
             self.search_results.get(display_idx).map(|(orig_idx, _)| *orig_idx)
         } else {
             Some(display_idx)
         }
-    }
-
-    fn settings_navigate_up(&mut self) {
-        self.settings_selected = match self.settings_selected {
-            SettingsField::Volume => SettingsField::MusicPath,
-            SettingsField::MusicPath => SettingsField::Volume,
-        };
-    }
-
-    fn settings_navigate_down(&mut self) {
-        self.settings_selected = match self.settings_selected {
-            SettingsField::Volume => SettingsField::MusicPath,
-            SettingsField::MusicPath => SettingsField::Volume,
-        };
     }
 }
 
@@ -505,174 +552,30 @@ impl UiRenderer for TuiRenderer {
     }
 
     fn render(&mut self, _state: &UiState) -> Result<()> {
-        let mut terminal = match self.terminal.take() {
-            Some(t) => t,
-            None => return Ok(()),
-        };
-
-        terminal.draw(|f| self.draw_ui(f))?;
-        self.terminal = Some(terminal);
+        if let Some(mut terminal) = self.terminal.take() {
+            terminal.draw(|f| self.draw_ui(f))?;
+            self.terminal = Some(terminal);
+        }
         Ok(())
     }
 
     fn poll_input(&mut self) -> Result<Vec<UiEvent>> {
         let mut events = Vec::new();
 
-        if event::poll(Duration::from_millis(0))? {
-            if let Event::Key(key) = event::read()? {
-                // Settings modal takes priority
-                if self.show_settings {
-                    if self.editing_field {
-                        match key.code {
-                            KeyCode::Enter => {
-                                self.editing_field = false;
-                                if self.settings_selected == SettingsField::Volume {
-                                    events.push(UiEvent::VolumeChangeRequested {
-                                        volume: self.temp_volume
-                                    });
-                                }
-                            }
-                            KeyCode::Esc => {
-                                self.editing_field = false;
-                            }
-                            KeyCode::Left => {
-                                if self.settings_selected == SettingsField::Volume {
-                                    self.temp_volume = self.temp_volume.saturating_sub(5);
-                                }
-                            }
-                            KeyCode::Right => {
-                                if self.settings_selected == SettingsField::Volume {
-                                    self.temp_volume = (self.temp_volume + 5).min(100);
-                                }
-                            }
-                            KeyCode::Char(c) if c.is_ascii_digit() => {
-                                if self.settings_selected == SettingsField::Volume {
-                                    let digit = c.to_digit(10).unwrap() as u8;
-                                    let new_val = (self.temp_volume % 10) * 10 + digit;
-                                    if new_val <= 100 {
-                                        self.temp_volume = new_val;
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
-                    } else {
-                        match key.code {
-                            KeyCode::Char('s') | KeyCode::Esc => {
-                                self.show_settings = false;
-                            }
-                            KeyCode::Up | KeyCode::Char('k') => {
-                                self.settings_navigate_up();
-                            }
-                            KeyCode::Down | KeyCode::Char('j') => {
-                                self.settings_navigate_down();
-                            }
-                            KeyCode::Enter => {
-                                self.editing_field = true;
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                // Search mode
-                else if self.search_active {
-                    match key.code {
-                        KeyCode::Esc => {
-                            // Exit search mode - emit event
-                            events.push(UiEvent::SearchToggled { active: false });
-                        }
-                        KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            // Clear search query - emit event
-                            events.push(UiEvent::SearchQueryChanged {
-                                query: String::new()
-                            });
-                        }
-                        KeyCode::Backspace => {
-                            // Delete last character - emit event with new query
-                            let mut new_query = self.search_query.clone();
-                            new_query.pop();
-                            events.push(UiEvent::SearchQueryChanged {
-                                query: new_query
-                            });
-                        }
-                        KeyCode::Up => {
-                            if let Some(index) = self.navigate_up() {
-                                events.push(UiEvent::SelectionChanged { index });
-                            }
-                        }
-                        KeyCode::Down => {
-                            if let Some(index) = self.navigate_down() {
-                                events.push(UiEvent::SelectionChanged { index });
-                            }
-                        }
-                        KeyCode::Enter => {
-                            events.push(UiEvent::PlaySelectedRequested);
-                        }
-                        KeyCode::Char(' ') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            events.push(UiEvent::TogglePauseRequested);
-                        }
-                        KeyCode::Char(c) => {
-                            // Add character - emit event with new query
-                            let mut new_query = self.search_query.clone();
-                            new_query.push(c);
-                            events.push(UiEvent::SearchQueryChanged {
-                                query: new_query
-                            });
-                        }
-                        _ => {}
-                    }
-                }
-                // Normal mode
-                else {
-                    match key.code {
-                        KeyCode::Char('q') | KeyCode::Esc => {
-                            events.push(UiEvent::QuitRequested);
-                        }
-                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            events.push(UiEvent::QuitRequested);
-                        }
-                        KeyCode::Char('s') => {
-                            self.show_settings = true;
-                        }
-                        KeyCode::Char('/') => {
-                            if !self.songs.is_empty() {
-                                events.push(UiEvent::SearchToggled { active: true });
-                            }
-                        }
-                        KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            if !self.songs.is_empty() {
-                                events.push(UiEvent::SearchToggled { active: true });
-                            }
-                        }
-                        KeyCode::Up | KeyCode::Char('k') => {
-                            if let Some(index) = self.navigate_up() {
-                                events.push(UiEvent::SelectionChanged { index });
-                            }
-                        }
-                        KeyCode::Down | KeyCode::Char('j') => {
-                            if let Some(index) = self.navigate_down() {
-                                events.push(UiEvent::SelectionChanged { index });
-                            }
-                        }
-                        KeyCode::Enter => {
-                            events.push(UiEvent::PlaySelectedRequested);
-                        }
-                        KeyCode::Char(' ') | KeyCode::Char('p') => {
-                            events.push(UiEvent::TogglePauseRequested);
-                        }
-                        KeyCode::Char('n') | KeyCode::Right => {
-                            events.push(UiEvent::NextTrackRequested);
-                        }
-                        KeyCode::Char('b') | KeyCode::Left => {
-                            events.push(UiEvent::PreviousTrackRequested);
-                        }
-                        KeyCode::Char('r') => {
-                            events.push(UiEvent::ShuffleToggled{shuffle_enabled: self.shuffle});
-                        }
-                        _ => {}
-                    }
-                }
-            }
+        if !event::poll(Duration::from_millis(0))? {
+            return Ok(events);
+        }
+
+        let Event::Key(key) = event::read()? else {
+            return Ok(events);
+        };
+
+        if self.show_settings {
+            self.handle_settings_input(key, &mut events);
+        } else if self.search_active {
+            self.handle_search_input(key, &mut events);
+        } else {
+            self.handle_normal_input(key, &mut events);
         }
 
         Ok(events)
@@ -691,6 +594,9 @@ impl UiRenderer for TuiRenderer {
 
         // Sync shuffle state
         self.shuffle = app_state.config.shuffle;
+
+        // Sync repeat — always safe since it has no confirm-step editing mode.
+        self.temp_repeat = app_state.config.repeat;
 
         // Update selected index
         if let Some(index) = app_state.ui.selected_index {
@@ -713,6 +619,191 @@ impl UiRenderer for TuiRenderer {
 
     fn as_any(&mut self) -> &mut dyn std::any::Any {
         self
+    }
+}
+
+
+impl TuiRenderer {
+    fn handle_settings_input(&mut self, key: event::KeyEvent, events: &mut Vec<UiEvent>) {
+        if self.editing_field {
+            self.handle_settings_editing_input(key, events);
+        } else {
+            self.handle_settings_navigation_input(key, events);
+        }
+    }
+
+    fn handle_settings_editing_input(&mut self, key: event::KeyEvent, events: &mut Vec<UiEvent>) {
+        // Only Volume uses confirm-step editing.
+        match key.code {
+            KeyCode::Enter => {
+                self.editing_field = false;
+                events.push(UiEvent::VolumeChangeRequested { volume: self.temp_volume });
+            }
+            KeyCode::Esc => {
+                self.editing_field = false;
+            }
+            KeyCode::Left => {
+                self.temp_volume = self.temp_volume.saturating_sub(5);
+            }
+            KeyCode::Right => {
+                self.temp_volume = (self.temp_volume + 5).min(100);
+            }
+            KeyCode::Char(c) if c.is_ascii_digit() => {
+                let digit = c.to_digit(10).unwrap() as u8;
+                let new_val = (self.temp_volume % 10) * 10 + digit;
+                if new_val <= 100 {
+                    self.temp_volume = new_val;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_settings_navigation_input(&mut self, key: event::KeyEvent, events: &mut Vec<UiEvent>) {
+        match key.code {
+            KeyCode::Char('s') | KeyCode::Esc => {
+                self.show_settings = false;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.settings_navigate_up();
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.settings_navigate_down();
+            }
+            KeyCode::Enter => match self.settings_selected {
+                SettingsField::Volume => {
+                    self.editing_field = true;
+                }
+                SettingsField::Repeat => {
+                    // Enter cycles forward — no confirm step needed.
+                    self.temp_repeat = self.temp_repeat.cycle();
+                    events.push(UiEvent::RepeatChangeRequested { mode: self.temp_repeat });
+                }
+                SettingsField::MusicPath => {
+                    // TODO Implement it
+                }
+            },
+            KeyCode::Left => {
+                if self.settings_selected == SettingsField::Repeat {
+                    self.temp_repeat = self.temp_repeat.cycle_back();
+                    events.push(UiEvent::RepeatChangeRequested { mode: self.temp_repeat });
+                }
+            }
+            KeyCode::Right => {
+                if self.settings_selected == SettingsField::Repeat {
+                    self.temp_repeat = self.temp_repeat.cycle();
+                    events.push(UiEvent::RepeatChangeRequested { mode: self.temp_repeat });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_search_input(&mut self, key: event::KeyEvent, events: &mut Vec<UiEvent>) {
+        match key.code {
+            KeyCode::Esc => {
+                events.push(UiEvent::SearchToggled { active: false });
+            }
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                events.push(UiEvent::SearchQueryChanged { query: String::new() });
+            }
+            KeyCode::Backspace => {
+                let mut q = self.search_query.clone();
+                q.pop();
+                events.push(UiEvent::SearchQueryChanged { query: q });
+            }
+            KeyCode::Up => {
+                if let Some(index) = self.navigate_up() {
+                    events.push(UiEvent::SelectionChanged { index });
+                }
+            }
+            KeyCode::Down => {
+                if let Some(index) = self.navigate_down() {
+                    events.push(UiEvent::SelectionChanged { index });
+                }
+            }
+            KeyCode::Enter => {
+                events.push(UiEvent::PlaySelectedRequested);
+            }
+            KeyCode::Char(' ') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                events.push(UiEvent::TogglePauseRequested);
+            }
+            KeyCode::Char(c) => {
+                let mut q = self.search_query.clone();
+                q.push(c);
+                events.push(UiEvent::SearchQueryChanged { query: q });
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_normal_input(&mut self, key: event::KeyEvent, events: &mut Vec<UiEvent>) {
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Esc => {
+                events.push(UiEvent::QuitRequested);
+            }
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                events.push(UiEvent::QuitRequested);
+            }
+            KeyCode::Char('s') => {
+                self.show_settings = true;
+            }
+            KeyCode::Char('/') => {
+                if !self.songs.is_empty() {
+                    events.push(UiEvent::SearchToggled { active: true });
+                }
+            }
+            KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if !self.songs.is_empty() {
+                    events.push(UiEvent::SearchToggled { active: true });
+                }
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if let Some(index) = self.navigate_up() {
+                    events.push(UiEvent::SelectionChanged { index });
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if let Some(index) = self.navigate_down() {
+                    events.push(UiEvent::SelectionChanged { index });
+                }
+            }
+            KeyCode::Enter => {
+                events.push(UiEvent::PlaySelectedRequested);
+            }
+            KeyCode::Char(' ') | KeyCode::Char('p') => {
+                events.push(UiEvent::TogglePauseRequested);
+            }
+            KeyCode::Char('n') | KeyCode::Right => {
+                events.push(UiEvent::NextTrackRequested);
+            }
+            KeyCode::Char('b') | KeyCode::Left => {
+                events.push(UiEvent::PreviousTrackRequested);
+            }
+            KeyCode::Char('r') => {
+                events.push(UiEvent::ShuffleToggled { shuffle_enabled: self.shuffle });
+            }
+            _ => {}
+        }
+    }
+}
+
+// Style for a settings field row — highlighted when selected.
+fn field_style(selected: bool) -> Style {
+    if selected {
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::White)
+    }
+}
+
+fn repeat_label(mode: RepeatMode) -> &'static str {
+    match mode {
+        RepeatMode::Off => "off",
+        RepeatMode::All => "all",
+        RepeatMode::One => "one",
     }
 }
 

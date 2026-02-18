@@ -556,6 +556,11 @@ impl Application {
                 }))?;
             }
 
+            UiEvent::RepeatChangeRequested { mode } => {
+                self.event_tx
+                    .send(AppEvent::Playback(PlaybackEvent::RepeatChanged { mode: *mode }))?;
+            }
+
             UiEvent::QuitRequested => {
                 self.event_tx.send(AppEvent::Shutdown)?;
             }
