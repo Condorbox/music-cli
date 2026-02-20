@@ -10,6 +10,15 @@ use crate::modules::library::search_engine::SearchEngine;
 use crate::modules::playback::shuffle_manager::ShuffleManager;
 use crate::utils::volume_percent_to_amplitude;
 
+enum NavTarget {
+    /// Move to a different song at this index.
+    Go(usize),
+    /// Replay the current song from the beginning.
+    Restart,
+    /// No playback action (e.g. nothing is playing yet).
+    Nothing,
+}
+
 /// Main application orchestrator
 pub struct Application {
     state: Arc<Mutex<AppState>>,
@@ -293,33 +302,75 @@ impl Application {
         library_len: usize,
         loop_playlist: bool,
     ) -> Result<()> {
-        let next_index = if self.shuffle_manager.is_enabled() {
+        let target = if self.shuffle_manager.is_enabled() {
             if self.shuffle_manager.remaining_in_pass() == 0 {
-                self.shuffle_manager
-                    .initialize(library_len, current_index);
+                self.shuffle_manager.initialize(library_len, current_index);
             }
-            self.shuffle_manager
-                .next_index(current_index, loop_playlist)
+            match self.shuffle_manager.next_index(current_index, loop_playlist) {
+                Some(idx) => NavTarget::Go(idx),
+                None => NavTarget::Restart, // shuffle exhausted, no loop —> restart current
+            }
         } else {
             match current_index {
                 Some(idx) => {
                     let next = idx + 1;
                     if next < library_len {
-                        Some(next)
+                        NavTarget::Go(next)
                     } else if loop_playlist {
-                        Some(0)
+                        NavTarget::Go(0)
                     } else {
-                        None
+                        NavTarget::Restart // at end, no loop —>restart current
                     }
                 }
-                None => None,
+                None => NavTarget::Nothing,
             }
         };
 
-        if let Some(next_idx) = next_index {
+        self.execute_nav(target, current_index)?;
+        Ok(())
+    }
+
+    fn advance_to_prev(
+        &mut self,
+        current_index: Option<usize>,
+        library_len: usize,
+        loop_playlist: bool,
+    ) -> Result<()> {
+        let target = if self.shuffle_manager.is_enabled() {
+            // Walk back through the existing shuffle history — no re-shuffle needed.
+            match self.shuffle_manager.previous_index(current_index) {
+                Some(idx) => NavTarget::Go(idx),
+                None => NavTarget::Restart, // at start of history, no loop — restart current
+            }
+        } else {
+            match current_index {
+                Some(0) => {
+                    if loop_playlist {
+                        NavTarget::Go(library_len.saturating_sub(1)) // wrap to last
+                    } else {
+                        NavTarget::Restart // at first song, no loop — restart current
+                    }
+                }
+                Some(idx) => NavTarget::Go(idx - 1),
+                None => NavTarget::Nothing,
+            }
+        };
+
+        self.execute_nav(target, current_index)?;
+        Ok(())
+    }
+
+    fn execute_nav(&mut self, target: NavTarget, current_index: Option<usize>) -> Result<()> {
+        let play_index = match target {
+            NavTarget::Go(idx) => Some(idx),
+            NavTarget::Restart => current_index, // replay same song from the top
+            NavTarget::Nothing => None,
+        };
+
+        if let Some(idx) = play_index {
             let mut state = self.state.lock().unwrap();
-            state.ui.selected_index = Some(next_idx);
-            let song = state.library.songs.get(next_idx).cloned();
+            state.ui.selected_index = Some(idx);
+            let song = state.library.songs.get(idx).cloned();
             drop(state);
 
             if let Some(song) = song {
@@ -330,7 +381,6 @@ impl Application {
 
         Ok(())
     }
-
 
     fn handle_library_event(&mut self, event: &LibraryEvent) -> Result<()> {
         match event {
@@ -408,52 +458,30 @@ impl Application {
             }
 
             UiEvent::NextTrackRequested => {
-                let mut state = self.state.lock().unwrap();
-                if let Some(current_index) = state.ui.selected_index {
-                    // Initialize shuffle manager if it's enabled but empty
-                    if self.shuffle_manager.is_enabled() && self.shuffle_manager.remaining_in_pass() == 0 {
-                        self.shuffle_manager.initialize(state.library.songs.len(), Some(current_index));
-                    }
+                let state = self.state.lock().unwrap();
+                let current_index = state.ui.selected_index;
+                let library_len = state.library.songs.len();
+                // RepeatMode::One does not loop on manual nav — user explicitly asked to move.
+                let loop_playlist = state.config.repeat == RepeatMode::All;
+                drop(state);
 
-                    let next_index = if self.shuffle_manager.is_enabled() {
-                        self.shuffle_manager.next_index(Some(current_index), true) // TODO Maybe change that always loop
-                    } else {                                                                        // and make a loop option
-                                                                                                    // that works also on normal mode
-                        let next = (current_index + 1).min(state.library.songs.len().saturating_sub(1));
-                        Some(next)
-                    };
-
-                    if let Some(next_idx) = next_index {
-                        state.ui.selected_index = Some(next_idx);
-
-                        if let Some(song) = state.library.songs.get(next_idx).cloned() {
-                            drop(state);
-                            self.event_tx
-                                .send(AppEvent::Playback(PlaybackEvent::PlayRequested { song }))?;
-                        }
-                    }
+                // Re-initialize shuffle queue if exhausted (new pass).
+                if self.shuffle_manager.is_enabled() && self.shuffle_manager.remaining_in_pass() == 0 {
+                    self.shuffle_manager.initialize(library_len, current_index);
                 }
+
+                self.advance_to_next(current_index, library_len, loop_playlist)?;
             }
 
             UiEvent::PreviousTrackRequested => {
-                let mut state = self.state.lock().unwrap();
-                if let Some(current_index) = state.ui.selected_index {
-                    let prev_index = if self.shuffle_manager.is_enabled() {
-                        self.shuffle_manager.previous_index(Some(current_index))
-                    } else {
-                        Some(current_index.saturating_sub(1))
-                    };
+                let state = self.state.lock().unwrap();
+                let current_index = state.ui.selected_index;
+                let library_len = state.library.songs.len();
+                // RepeatMode::One does not loop on manual nav — user explicitly asked to move.
+                let loop_playlist = state.config.repeat == RepeatMode::All;
+                drop(state);
 
-                    if let Some(prev_idx) = prev_index {
-                        state.ui.selected_index = Some(prev_idx);
-
-                        if let Some(song) = state.library.songs.get(prev_idx).cloned() {
-                            drop(state);
-                            self.event_tx
-                                .send(AppEvent::Playback(PlaybackEvent::PlayRequested { song }))?;
-                        }
-                    }
-                }
+                self.advance_to_prev(current_index, library_len, loop_playlist)?;
             }
 
             UiEvent::VolumeChangeRequested { volume } => {
