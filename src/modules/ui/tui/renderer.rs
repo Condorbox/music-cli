@@ -435,9 +435,16 @@ impl TuiRenderer {
 
     fn draw_settings_help(&self, f: &mut Frame, area: Rect) {
         let text = if self.editing_field {
-            "←/→: Adjust • 0-9: Type value • Enter: Confirm • Esc: Cancel"
+            "←/→: Adjust  •  0-9: Type value  •  Enter: Confirm  •  Esc: Cancel"
         } else {
-            "↑/↓: Navigate fields • Enter: Edit • s/Esc: Close"
+            match self.settings_selected {
+                SettingsField::Volume =>
+                    "↑/↓: Navigate  •  Enter: Edit volume  •  s/Esc: Close",
+                SettingsField::Repeat =>
+                    "↑/↓: Navigate  •  ←/→ or Enter: Cycle mode  •  s/Esc: Close",
+                SettingsField::MusicPath =>
+                    "↑/↓: Navigate  •  s/Esc: Close",
+            }
         };
 
         f.render_widget(
