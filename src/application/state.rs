@@ -7,8 +7,13 @@ use serde::{Deserialize, Serialize};
 /// Complete application state (single source of truth)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppState {
+    #[serde(default)]
     pub config: ConfigState,
+
+    #[serde(default)]
     pub library: LibraryState,
+
+    #[serde(default)]
     pub playback: PlaybackState,
 
     #[serde(skip)]
@@ -17,10 +22,21 @@ pub struct AppState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigState {
+    #[serde(default)]
     pub root_path: Option<PathBuf>,
+
+    #[serde(default = "default_volume")]
     pub volume: f32,
+
+    #[serde(default)]
     pub shuffle: bool,
+
+    #[serde(default)]
     pub repeat: RepeatMode,
+}
+
+fn default_volume() -> f32 {
+    1.0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,6 +94,41 @@ impl Default for UiState {
             search_active: false,
             search_query: String::new(),
             search_results: Vec::new(),
+        }
+    }
+}
+
+impl Default for ConfigState {
+    fn default() -> Self {
+        Self {
+            root_path: None,
+            volume: default_volume(),
+            shuffle: false,
+            repeat: Default::default(),
+        }
+    }
+}
+
+impl Default for LibraryState {
+    fn default() -> Self {
+        Self {
+            songs: Vec::new(),
+            is_scanning: false,
+            last_scan_path: None,
+        }
+    }
+}
+
+impl Default for PlaybackState {
+    fn default() -> Self {
+        Self {
+            current_song: None,
+            is_playing: false,
+            is_paused: false,
+            volume: default_volume(),
+            playlist: Vec::new(),
+            current_index: None,
+            current_elapsed: Duration::from_secs(0),
         }
     }
 }
