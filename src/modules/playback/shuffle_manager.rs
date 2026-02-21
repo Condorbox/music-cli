@@ -207,3 +207,277 @@ impl Default for ShuffleManager {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// Build an initialized, enabled ShuffleManager ready to use.
+    fn enabled_manager(size: usize) -> ShuffleManager {
+        let mut m = ShuffleManager::new();
+        m.set_enabled(true);
+        m.initialize(size, None);
+        m
+    }
+
+    // ── Construction ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn new_is_disabled_with_empty_state() {
+        let m = ShuffleManager::new();
+        assert!(!m.is_enabled());
+        assert_eq!(m.queue_position(), 0);
+        assert_eq!(m.remaining_in_pass(), 0);
+    }
+
+    // ── toggle / set_enabled ──────────────────────────────────────────────────
+
+    #[test]
+    fn toggle_flips_enabled_and_returns_new_state() {
+        let mut m = ShuffleManager::new();
+        assert!(m.toggle());  // false → true
+        assert!(m.is_enabled());
+        assert!(!m.toggle()); // true → false
+        assert!(!m.is_enabled());
+    }
+
+    #[test]
+    fn set_enabled_same_value_is_noop() {
+        let mut m = ShuffleManager::new();
+        // Already disabled; calling set_enabled(false) should not clear or change anything.
+        m.set_enabled(false);
+        assert!(!m.is_enabled());
+
+        m.set_enabled(true);
+        m.initialize(5, None);
+        let pos_before = m.queue_position();
+
+        m.set_enabled(true); // no-op
+        assert_eq!(m.queue_position(), pos_before, "position must not change on no-op");
+    }
+
+    #[test]
+    fn set_enabled_false_clears_queue_and_position() {
+        let mut m = enabled_manager(5);
+        // Advance so queue_position is non-zero.
+        m.next_index(Some(0), true);
+
+        m.set_enabled(false);
+        assert!(!m.is_enabled());
+        assert_eq!(m.queue_position(), 0);
+        assert_eq!(m.remaining_in_pass(), 0);
+    }
+
+    // ── initialize ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn initialize_while_disabled_does_nothing() {
+        let mut m = ShuffleManager::new();
+        m.initialize(10, None);
+        assert_eq!(m.remaining_in_pass(), 0, "disabled manager should have empty queue");
+    }
+
+    #[test]
+    fn initialize_builds_queue_of_correct_size() {
+        let m = enabled_manager(8);
+        // remaining = len - (position+1); position starts at 0 → remaining = 7
+        assert_eq!(m.remaining_in_pass(), 7);
+    }
+
+    #[test]
+    fn initialize_queue_contains_all_indices_exactly_once() {
+        const SIZE: usize = 12;
+        let mut m = enabled_manager(SIZE);
+
+        // Drain the whole queue and collect every index.
+        let mut seen = Vec::new();
+        let first = m.queue_position(); // already at position 0 after initialize
+        seen.push(m.shuffle_queue[first]);
+        while m.remaining_in_pass() > 0 {
+            if let Some(idx) = m.next_index(seen.last().copied(), false) {
+                seen.push(idx);
+            }
+        }
+
+        seen.sort_unstable();
+        let expected: Vec<usize> = (0..SIZE).collect();
+        assert_eq!(seen, expected, "every index must appear exactly once per pass");
+    }
+
+    // ── next_index — shuffle DISABLED ─────────────────────────────────────────
+
+    #[test]
+    fn next_sequential_advances_by_one() {
+        let mut m = ShuffleManager::new();
+        m.playlist_size = 5;
+        assert_eq!(m.next_index(Some(2), false), Some(3));
+        assert_eq!(m.next_index(Some(0), false), Some(1));
+    }
+
+    #[test]
+    fn next_sequential_no_loop_returns_none_at_end() {
+        let mut m = ShuffleManager::new();
+        m.playlist_size = 3;
+        assert_eq!(m.next_index(Some(2), false), None);
+    }
+
+    #[test]
+    fn next_sequential_with_loop_wraps_to_zero() {
+        let mut m = ShuffleManager::new();
+        m.playlist_size = 3;
+        assert_eq!(m.next_index(Some(2), true), Some(0));
+    }
+
+    #[test]
+    fn next_sequential_none_current_returns_none() {
+        let mut m = ShuffleManager::new();
+        m.playlist_size = 5;
+        assert_eq!(m.next_index(None, true), None);
+    }
+
+    // ── previous_index — shuffle DISABLED ────────────────────────────────────
+
+    #[test]
+    fn prev_sequential_decrements_by_one() {
+        let mut m = ShuffleManager::new();
+        assert_eq!(m.previous_index(Some(3)), Some(2));
+        assert_eq!(m.previous_index(Some(1)), Some(0));
+    }
+
+    #[test]
+    fn prev_sequential_at_zero_returns_none() {
+        let mut m = ShuffleManager::new();
+        assert_eq!(m.previous_index(Some(0)), None);
+    }
+
+    #[test]
+    fn prev_sequential_none_current_returns_none() {
+        let mut m = ShuffleManager::new();
+        assert_eq!(m.previous_index(None), None);
+    }
+
+    // ── next_index — shuffle ENABLED ─────────────────────────────────────────
+
+    #[test]
+    fn next_shuffle_advances_through_queue() {
+        let mut m = enabled_manager(5);
+        let mut visited = vec![m.shuffle_queue[0]]; // the current "playing" index
+        for _ in 0..4 {
+            let next = m.next_index(visited.last().copied(), false);
+            assert!(next.is_some(), "should have a next song within the pass");
+            visited.push(next.unwrap());
+        }
+        assert_eq!(visited.len(), 5);
+    }
+
+    #[test]
+    fn next_shuffle_no_loop_returns_none_when_queue_exhausted() {
+        let mut m = enabled_manager(3);
+        // Drain all 3 positions.
+        let mut last = m.shuffle_queue[0];
+        m.next_index(Some(last), false); // pos 1
+        last = m.shuffle_queue[1];
+        m.next_index(Some(last), false); // pos 2
+        last = m.shuffle_queue[2];
+
+        // Next call should see end of queue with loop=false.
+        let result = m.next_index(Some(last), false);
+        assert_eq!(result, None, "should stop at end when loop=false");
+    }
+
+    #[test]
+    fn next_shuffle_with_loop_reshuffles_and_continues() {
+        let mut m = enabled_manager(3);
+        // Exhaust the first pass.
+        let mut last = m.shuffle_queue[0];
+        m.next_index(Some(last), true);
+        last = m.shuffle_queue[1];
+        m.next_index(Some(last), true);
+        last = m.shuffle_queue[2];
+
+        // This call hits end-of-queue but loop=true → reshuffle.
+        let result = m.next_index(Some(last), true);
+        assert!(result.is_some(), "should produce a song after reshuffle");
+        let idx = result.unwrap();
+        assert!(idx < 3, "index must be within playlist bounds");
+    }
+
+    #[test]
+    fn next_shuffle_no_immediate_repeat_after_reshuffle() {
+        // Run many reshuffles and verify the first song of a new pass never equals
+        // the last song of the previous pass (only guaranteed when size > 1).
+        let size = 4;
+        let mut m = enabled_manager(size);
+
+        for _ in 0..20 {
+            // Drain to the last position.
+            let mut last = m.shuffle_queue[0];
+            for _ in 1..size {
+                last = m.next_index(Some(last), true).unwrap();
+            }
+            let last_of_pass = last;
+            // This triggers a reshuffle.
+            let first_of_new_pass = m.next_index(Some(last_of_pass), true).unwrap();
+            assert_ne!(
+                last_of_pass, first_of_new_pass,
+                "first song of new shuffle pass must not equal last song of previous pass"
+            );
+        }
+    }
+
+    // ── previous_index — shuffle ENABLED ─────────────────────────────────────
+
+    #[test]
+    fn prev_shuffle_walks_back_through_history() {
+        let mut m = enabled_manager(5);
+        let first = m.shuffle_queue[0];
+        let second = m.next_index(Some(first), false).unwrap();
+
+        // Going back should return the first.
+        let returned = m.previous_index(Some(second));
+        assert_eq!(returned, Some(first));
+    }
+
+    #[test]
+    fn prev_shuffle_at_start_of_queue_returns_none() {
+        let mut m = enabled_manager(5);
+        // queue_position is 0 right after initialize.
+        assert_eq!(m.previous_index(Some(m.shuffle_queue[0])), None);
+    }
+
+    // ── remaining_in_pass ─────────────────────────────────────────────────────
+
+    #[test]
+    fn remaining_in_pass_decrements_on_each_advance() {
+        let size: usize = 6;
+        let mut m = enabled_manager(size);
+        assert_eq!(m.remaining_in_pass(), size - 1);
+
+        let mut last = m.shuffle_queue[0];
+        for expected_remaining in (0..size - 1).rev() {
+            last = m.next_index(Some(last), false).unwrap();
+            assert_eq!(m.remaining_in_pass(), expected_remaining);
+        }
+    }
+
+    // ── update_playlist_size ──────────────────────────────────────────────────
+
+    #[test]
+    fn update_playlist_size_noop_when_same() {
+        let mut m = enabled_manager(5);
+        let pos_before = m.queue_position();
+        m.update_playlist_size(5);
+        assert_eq!(m.queue_position(), pos_before, "must not regenerate when size unchanged");
+    }
+
+    #[test]
+    fn update_playlist_size_regenerates_queue_when_size_changes() {
+        let mut m = enabled_manager(5);
+        m.update_playlist_size(10);
+        // After resize, position resets and queue fits new size.
+        assert_eq!(m.queue_position(), 0);
+        assert_eq!(m.remaining_in_pass(), 9, "new queue should have 10 entries");
+    }
+}
