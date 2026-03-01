@@ -103,7 +103,7 @@ impl Application {
                     }
 
                     // Emit library loaded event
-                    let songs = self.state.lock().unwrap().library.songs.clone();
+                    let songs = (*self.state.lock().unwrap().library.songs).clone();
                     self.event_tx
                         .send(AppEvent::Library(LibraryEvent::LibraryLoaded { songs }))?;
                 }

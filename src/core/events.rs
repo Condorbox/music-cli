@@ -120,6 +120,9 @@ pub enum UiEvent {
 
     /// Set repeat mode explicitly
     RepeatChangeRequested { mode: RepeatMode },
+
+    /// User requested a library refresh
+    RefreshRequested,
 }
 
 /// Type alias for event sender

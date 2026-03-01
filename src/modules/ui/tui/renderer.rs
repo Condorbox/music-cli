@@ -18,6 +18,7 @@ use ratatui::{
 };
 use std::cell::RefCell;
 use std::io::{stdout, Stdout};
+use std::sync::Arc;
 use std::time::Duration;
 use crate::core::models::RepeatMode;
 use crate::modules::playback::playback_progress::PlaybackProgress;
@@ -50,7 +51,7 @@ pub struct TuiRenderer {
     list_state: RefCell<ListState>,
 
     // Display state (synced from AppState)
-    songs: Vec<crate::core::models::Song>,
+    songs: Arc<Vec<crate::core::models::Song>>,
     current_song: Option<crate::core::models::Song>,
     current_elapsed: Duration, // Synced from AppState.playback.current_elapsed
     is_paused: bool,
@@ -75,7 +76,7 @@ impl TuiRenderer {
         Self {
             terminal: None,
             list_state: RefCell::new(ListState::default()),
-            songs: Vec::new(),
+            songs: Arc::new(Vec::new()),
             current_song: None,
             is_paused: false,
             search_active: false,
@@ -94,7 +95,7 @@ impl TuiRenderer {
         }
     }
 
-    pub fn set_songs(&mut self, songs: Vec<crate::core::models::Song>) {
+    pub fn set_songs(&mut self, songs: Arc<Vec<crate::core::models::Song>>) {
         self.songs = songs;
         if !self.songs.is_empty() && self.list_state.borrow().selected().is_none() {
             self.list_state.borrow_mut().select(Some(0));
@@ -335,6 +336,7 @@ impl TuiRenderer {
             Span::raw("b: Previous • "),
             Span::styled("r: Shuffle • ", Style::default().fg(Color::Cyan)),
             Span::styled("/: Search • ", Style::default().fg(Color::Yellow)),
+            Span::styled("F5: Refresh • ", Style::default().fg(Color::Green)),
             Span::raw("s: Settings • "),
             Span::raw("q: Quit"),
         ])])
@@ -664,6 +666,7 @@ impl UiRenderer for TuiRenderer {
 
     fn update_state(&mut self, app_state: &crate::application::state::AppState) {
         // Sync playback state
+        self.songs = Arc::clone(&app_state.library.songs);  // Arc::clone so O(1)
         self.current_song = app_state.playback.current_song.clone();
         self.current_elapsed = app_state.playback.current_elapsed;
         self.is_paused = app_state.playback.is_paused;
@@ -923,6 +926,9 @@ impl TuiRenderer {
             }
             KeyCode::Char('r') => {
                 events.push(UiEvent::ShuffleToggled { shuffle_enabled: self.shuffle });
+            }
+            KeyCode::F(5) | KeyCode::Char('u')=> {
+                events.push(UiEvent::RefreshRequested);
             }
             _ => {}
         }

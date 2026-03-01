@@ -2,6 +2,7 @@ use crate::application::handlers::HandlerContext;
 use crate::core::events::{AppEvent, LibraryEvent};
 use crate::modules::library::search_engine::SearchEngine;
 use anyhow::Result;
+use crate::modules::library::scanner;
 
 /// Handles all [`LibraryEvent`] variants.
 ///
@@ -48,6 +49,32 @@ impl LibraryHandler {
 
                 ctx.event_tx
                     .send(AppEvent::Library(LibraryEvent::SearchResults { results }))?;
+            }
+
+            LibraryEvent::ScanRequested { path } => {
+                ctx.event_tx
+                    .send(AppEvent::Library(LibraryEvent::ScanStarted { path: path.clone() }))?;
+
+                match scanner::scan_directory(path) {
+                    Ok(songs) => {
+                        let count = songs.len();
+                        ctx.event_tx.send(AppEvent::Library(LibraryEvent::ScanCompleted {
+                            songs,
+                            count,
+                        }))?;
+                    }
+                    Err(e) => {
+                        ctx.event_tx.send(AppEvent::Library(LibraryEvent::ScanStarted {
+                            path: path.clone(),
+                        }))?;
+                        // Reuse the status message channel to surface the error
+                        ctx.event_tx.send(AppEvent::Ui(
+                            crate::core::events::UiEvent::ShowError {
+                                message: format!("Scan failed: {}", e),
+                            },
+                        ))?;
+                    }
+                }
             }
 
             // All other variants are handled by AppState::apply_event.

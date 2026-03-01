@@ -133,6 +133,21 @@ impl UiHandler {
                     .send(AppEvent::Playback(PlaybackEvent::RepeatChanged { mode: *mode }))?;
             }
 
+            UiEvent::RefreshRequested => {
+                let root_path = ctx.state.lock().unwrap().config.root_path.clone();
+                match root_path {
+                    Some(path) => {
+                        ctx.event_tx
+                            .send(AppEvent::Library(LibraryEvent::ScanRequested { path }))?;
+                    }
+                    None => {
+                        ctx.event_tx.send(AppEvent::Ui(UiEvent::ShowError {
+                            message: "No music path set. Configure it in Settings (s).".to_string(),
+                        }))?;
+                    }
+                }
+            }
+
             UiEvent::QuitRequested => {
                 ctx.event_tx.send(AppEvent::Shutdown)?;
             }

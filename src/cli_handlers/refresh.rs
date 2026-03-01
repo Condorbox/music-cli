@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::cli_handlers::CliCommand;
 use crate::modules::library::scanner;
 use crate::modules::storage::json_backend::JsonStorageBackend;
@@ -26,7 +27,7 @@ impl CliCommand for RefreshCommand {
         let songs = scanner::scan_directory(&root_path)?;
         let count = songs.len();
 
-        state.library.songs = songs;
+        state.library.songs = Arc::new(songs);
         storage.save(&state)?;
 
         ui.print_message(&format!("✓ Refresh complete. Found {} songs.", count));

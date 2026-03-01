@@ -31,7 +31,7 @@ impl CliCommand for PlaylistCommand {
         // Set up playlist in state
         {
             let mut app_state = app.state();
-            app_state.playback.playlist = state.library.songs.clone();
+            app_state.playback.playlist = (*state.library.songs).clone();
             app_state.playback.current_index = Some(0);
             app_state.library.songs = state.library.songs.clone();
         }

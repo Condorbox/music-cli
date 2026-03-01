@@ -1,6 +1,7 @@
 use crate::core::models::{RepeatMode, Song};
 use crate::core::events::*;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
@@ -41,7 +42,12 @@ fn default_volume() -> f32 {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LibraryState {
-    pub songs: Vec<Song>,
+    /// Shared, immutable snapshot of the song list.
+    ///
+    /// Using `Arc` means cloning `LibraryState` (or just this field) is O(1) —
+    /// it increments a reference count rather than heap-allocating thousands of `Song`s.
+    /// A new `Arc` is only allocated when a scan replaces the list entirely.
+    pub songs: Arc<Vec<Song>>,
 
     #[serde(skip)]
     pub is_scanning: bool,
@@ -112,7 +118,7 @@ impl Default for ConfigState {
 impl Default for LibraryState {
     fn default() -> Self {
         Self {
-            songs: Vec::new(),
+            songs: Arc::new(Vec::new()),
             is_scanning: false,
             last_scan_path: None,
         }
@@ -143,7 +149,7 @@ impl Default for AppState {
                 repeat: RepeatMode::default(),
             },
             library: LibraryState {
-                songs: Vec::new(),
+                songs: Arc::new(Vec::new()),
                 is_scanning: false,
                 last_scan_path: None,
             },
@@ -228,17 +234,17 @@ impl AppState {
                     self.ui.status_message = format!("Scanning... found {} songs", found);
                 }
                 LibraryEvent::ScanCompleted { songs, count } => {
-                    self.library.songs = songs.clone();
+                    // Wrap in a new Arc — this is the only allocation on the hot path.
+                    self.library.songs = Arc::new(songs.clone());
                     self.library.is_scanning = false;
                     self.ui.status_message = format!("Found {} songs", count);
 
-                    // Auto-select first song if nothing selected
                     if self.ui.selected_index.is_none() && !songs.is_empty() {
                         self.ui.selected_index = Some(0);
                     }
                 }
                 LibraryEvent::LibraryLoaded { songs } => {
-                    self.library.songs = songs.clone();
+                    self.library.songs = Arc::new(songs.clone());
                     if self.ui.selected_index.is_none() && !songs.is_empty() {
                         self.ui.selected_index = Some(0);
                     }
@@ -250,8 +256,6 @@ impl AppState {
                         self.ui.status_message = "No results found".to_string();
                     } else {
                         self.ui.status_message = format!("Found {} matches", results.len());
-
-                        // Auto-select first result
                         if !results.is_empty() {
                             self.ui.selected_index = Some(results[0].0);
                         }
@@ -328,7 +332,7 @@ mod tests {
 
     fn state_with_songs(n: usize) -> AppState {
         let mut state = AppState::default();
-        state.library.songs = (0..n).map(|i| make_song(&format!("Song {}", i))).collect();
+        state.library.songs = Arc::new((0..n).map(|i| make_song(&format!("Song {}", i))).collect());
         state
     }
 
