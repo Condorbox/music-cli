@@ -36,6 +36,15 @@ enum SettingsField {
     Repeat
 }
 
+/// Inline validation state for the path field.
+#[derive(Debug, Clone, PartialEq)]
+enum PathValidation {
+    /// User hasn't tried to confirm yet, or is still typing.
+    Idle,
+    /// Last confirm attempt failed
+    Error(String),
+}
+
 pub struct TuiRenderer {
     terminal: Option<Terminal<CrosstermBackend<Stdout>>>,
     list_state: RefCell<ListState>,
@@ -58,6 +67,7 @@ pub struct TuiRenderer {
     editing_field: bool,
     temp_path: String,
     editing_path: bool,
+    path_validation: PathValidation,
 }
 
 impl TuiRenderer {
@@ -80,6 +90,7 @@ impl TuiRenderer {
             editing_field: false,
             temp_path: String::new(),
             editing_path: false,
+            path_validation: PathValidation::Idle,
         }
     }
 
@@ -355,7 +366,9 @@ impl TuiRenderer {
     }
 
     fn draw_settings_modal(&self, f: &mut Frame) {
-        let area = centered_rect(60, 50, f.area());
+        // Make the modal taller when path editing is active so the error line fits.
+        let height_pct = if self.editing_path { 60 } else { 50 };
+        let area = centered_rect(60, height_pct, f.area());
         f.render_widget(Clear, area);
         f.render_widget(
             Block::default()
@@ -372,22 +385,29 @@ impl TuiRenderer {
             height: area.height.saturating_sub(4),
         };
 
-        // One row per settings field + a spacer + help line.
+        // Extra row for the inline path error when needed.
+        let path_error_height = match &self.path_validation {
+            PathValidation::Error(_) => 1,
+            PathValidation::Idle => 0,
+        };
+
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3), // Volume
-                Constraint::Length(3), // Repeat
-                Constraint::Length(3), // Music Path
-                Constraint::Min(0),    // spacer
-                Constraint::Length(2), // help
+                Constraint::Length(3),                          // Volume
+                Constraint::Length(3),                          // Repeat
+                Constraint::Length(3),                          // Music Path input
+                Constraint::Length(path_error_height),          // Inline error (0 or 1)
+                Constraint::Min(0),                             // spacer
+                Constraint::Length(2),                          // help
             ])
             .split(inner);
 
         self.draw_settings_volume(f, chunks[0]);
         self.draw_settings_repeat(f, chunks[1]);
         self.draw_settings_path(f, chunks[2]);
-        self.draw_settings_help(f, chunks[4]);
+        self.draw_settings_path_error(f, chunks[3]);
+        self.draw_settings_help(f, chunks[5]);
     }
 
     fn draw_settings_volume(&self, f: &mut Frame, area: Rect) {
@@ -432,22 +452,51 @@ impl TuiRenderer {
     fn draw_settings_path(&self, f: &mut Frame, area: Rect) {
         let selected = self.settings_selected == SettingsField::MusicPath;
 
-        let label = if self.editing_path {
-            format!(
-                "Music Path: {}█  [Enter: confirm  •  Esc: cancel  •  Ctrl+U: clear]",
-                self.temp_path
-            )
+        // The "label" color drives the key text ("Music Path:") and hint.
+        // When selected: yellow. When not: white.
+        let label_color = if selected { Color::Yellow } else { Color::White };
+        // Hint text is always a dimmer shade of whatever the label color is.
+        let hint_color = if selected { Color::Yellow } else { Color::DarkGray };
+
+        let label: Line = if self.editing_path {
+            Line::from(vec![
+                Span::styled("Music Path: ", Style::default().fg(label_color).add_modifier(Modifier::BOLD)),
+                Span::styled(&self.temp_path, Style::default().fg(Color::White)),
+                Span::styled("█", Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    "  [Enter confirm • Esc cancel • Ctrl+U clear]",
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ])
         } else if self.temp_path.is_empty() {
-            "Music Path: (not set)  [Enter to set]".to_string()
+            Line::from(vec![
+                Span::styled("Music Path: ", Style::default().fg(label_color).add_modifier(if selected { Modifier::BOLD } else { Modifier::empty() })),
+                Span::styled("(not set)", Style::default().fg(Color::DarkGray)),
+                Span::styled("  [Enter to set]", Style::default().fg(hint_color)),
+            ])
         } else {
-            format!("Music Path: {}  [Enter to change]", self.temp_path)
+            Line::from(vec![
+                Span::styled("Music Path: ", Style::default().fg(label_color).add_modifier(if selected { Modifier::BOLD } else { Modifier::empty() })),
+                Span::styled(&self.temp_path, Style::default().fg(Color::Cyan)),
+                Span::styled("  [Enter to change]", Style::default().fg(hint_color)),
+            ])
         };
 
-        f.render_widget(
-            Paragraph::new(label).style(field_style(selected)),
-            area,
-        );
+        f.render_widget(Paragraph::new(label), area);
+    }
 
+    /// Renders the inline error line directly below the path field.
+    /// Renders nothing (zero-height) when there is no error.
+    fn draw_settings_path_error(&self, f: &mut Frame, area: Rect) {
+        if let PathValidation::Error(msg) = &self.path_validation {
+            f.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled("  ✗ ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+                    Span::styled(msg.as_str(), Style::default().fg(Color::Red)),
+                ])),
+                area,
+            );
+        }
     }
 
     fn draw_settings_help(&self, f: &mut Frame, area: Rect) {
@@ -701,33 +750,48 @@ impl TuiRenderer {
         match key.code {
             KeyCode::Enter => {
                 let path = std::path::Path::new(&self.temp_path);
-                if path.is_dir() {
+                if self.temp_path.is_empty() {
+                    self.path_validation =
+                        PathValidation::Error("Path cannot be empty.".to_string());
+                } else if !path.exists() {
+                    self.path_validation =
+                        PathValidation::Error("Path does not exist.".to_string());
+                } else if !path.is_dir() {
+                    self.path_validation =
+                        PathValidation::Error("Path is not a directory.".to_string());
+                } else {
+                    // Valid — emit event and exit edit mode cleanly.
                     self.editing_path = false;
+                    self.path_validation = PathValidation::Idle;
                     events.push(UiEvent::PathChangeRequested {
                         path: path.to_path_buf(),
-                    });
-                } else {
-                    events.push(UiEvent::ShowError {
-                        message: format!("'{}' is not a valid directory.", self.temp_path),
                     });
                 }
             }
             KeyCode::Esc => {
+                // Cancel: restore last known-good value on next update_state tick.
                 self.editing_path = false;
-                // Restore to last known good value from app state (sync will fix it next tick)
+                self.path_validation = PathValidation::Idle;
             }
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.temp_path.clear();
+                // Clear error feedback when the user starts correcting.
+                self.path_validation = PathValidation::Idle;
             }
             KeyCode::Backspace => {
                 self.temp_path.pop();
+                // Clear stale error as soon as the user modifies the input.
+                self.path_validation = PathValidation::Idle;
             }
             KeyCode::Char(c) => {
                 self.temp_path.push(c);
+                // Clear stale error as soon as the user modifies the input.
+                self.path_validation = PathValidation::Idle;
             }
             _ => {}
         }
     }
+
 
     fn handle_settings_navigation_input(&mut self, key: event::KeyEvent, events: &mut Vec<UiEvent>) {
         match key.code {
@@ -751,6 +815,7 @@ impl TuiRenderer {
                 }
                 SettingsField::MusicPath => {
                     self.editing_path = true;
+                    self.path_validation = PathValidation::Idle;
                 }
             },
             KeyCode::Left => {
