@@ -56,6 +56,8 @@ pub struct TuiRenderer {
     temp_volume: u8,
     temp_repeat: RepeatMode,
     editing_field: bool,
+    temp_path: String,
+    editing_path: bool,
 }
 
 impl TuiRenderer {
@@ -76,6 +78,8 @@ impl TuiRenderer {
             temp_volume: 100,
             temp_repeat: RepeatMode::default(),
             editing_field: false,
+            temp_path: String::new(),
+            editing_path: false,
         }
     }
 
@@ -427,15 +431,30 @@ impl TuiRenderer {
 
     fn draw_settings_path(&self, f: &mut Frame, area: Rect) {
         let selected = self.settings_selected == SettingsField::MusicPath;
+
+        let label = if self.editing_path {
+            format!(
+                "Music Path: {}█  [Enter: confirm  •  Esc: cancel  •  Ctrl+U: clear]",
+                self.temp_path
+            )
+        } else if self.temp_path.is_empty() {
+            "Music Path: (not set)  [Enter to set]".to_string()
+        } else {
+            format!("Music Path: {}  [Enter to change]", self.temp_path)
+        };
+
         f.render_widget(
-            Paragraph::new("Music Path: [coming soon]").style(field_style(selected)),
+            Paragraph::new(label).style(field_style(selected)),
             area,
         );
+
     }
 
     fn draw_settings_help(&self, f: &mut Frame, area: Rect) {
         let text = if self.editing_field {
             "←/→: Adjust  •  0-9: Type value  •  Enter: Confirm  •  Esc: Cancel"
+        } else if self.editing_path {
+            "Type path  •  Enter: Confirm  •  Esc: Cancel  •  Ctrl+U: Clear"
         } else {
             match self.settings_selected {
                 SettingsField::Volume =>
@@ -443,7 +462,7 @@ impl TuiRenderer {
                 SettingsField::Repeat =>
                     "↑/↓: Navigate  •  ←/→ or Enter: Cycle mode  •  s/Esc: Close",
                 SettingsField::MusicPath =>
-                    "↑/↓: Navigate  •  s/Esc: Close",
+                    "↑/↓: Navigate  •  Enter: Edit path  •  s/Esc: Close",
             }
         };
 
@@ -605,6 +624,16 @@ impl UiRenderer for TuiRenderer {
         // Sync repeat — always safe since it has no confirm-step editing mode.
         self.temp_repeat = app_state.config.repeat;
 
+        // Sync path — only when not actively editing, same pattern as volume.
+        if !self.editing_path {
+            self.temp_path = app_state
+                .config
+                .root_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_default();
+        }
+
         // Update selected index
         if let Some(index) = app_state.ui.selected_index {
             // Map to display index (search results or full list)
@@ -632,7 +661,9 @@ impl UiRenderer for TuiRenderer {
 
 impl TuiRenderer {
     fn handle_settings_input(&mut self, key: event::KeyEvent, events: &mut Vec<UiEvent>) {
-        if self.editing_field {
+        if self.editing_path {
+            self.handle_path_editing_input(key, events);
+        } else if self.editing_field {
             self.handle_settings_editing_input(key, events);
         } else {
             self.handle_settings_navigation_input(key, events);
@@ -666,6 +697,38 @@ impl TuiRenderer {
         }
     }
 
+    fn handle_path_editing_input(&mut self, key: event::KeyEvent, events: &mut Vec<UiEvent>) {
+        match key.code {
+            KeyCode::Enter => {
+                let path = std::path::Path::new(&self.temp_path);
+                if path.is_dir() {
+                    self.editing_path = false;
+                    events.push(UiEvent::PathChangeRequested {
+                        path: path.to_path_buf(),
+                    });
+                } else {
+                    events.push(UiEvent::ShowError {
+                        message: format!("'{}' is not a valid directory.", self.temp_path),
+                    });
+                }
+            }
+            KeyCode::Esc => {
+                self.editing_path = false;
+                // Restore to last known good value from app state (sync will fix it next tick)
+            }
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.temp_path.clear();
+            }
+            KeyCode::Backspace => {
+                self.temp_path.pop();
+            }
+            KeyCode::Char(c) => {
+                self.temp_path.push(c);
+            }
+            _ => {}
+        }
+    }
+
     fn handle_settings_navigation_input(&mut self, key: event::KeyEvent, events: &mut Vec<UiEvent>) {
         match key.code {
             KeyCode::Char('s') | KeyCode::Esc => {
@@ -687,7 +750,7 @@ impl TuiRenderer {
                     events.push(UiEvent::RepeatChangeRequested { mode: self.temp_repeat });
                 }
                 SettingsField::MusicPath => {
-                    // TODO Implement it
+                    self.editing_path = true;
                 }
             },
             KeyCode::Left => {
