@@ -469,17 +469,23 @@ impl TuiRenderer {
                 ),
             ])
         } else if self.temp_path.is_empty() {
-            Line::from(vec![
-                Span::styled("Music Path: ", Style::default().fg(label_color).add_modifier(if selected { Modifier::BOLD } else { Modifier::empty() })),
+            let mut spans = vec![
+                Span::styled("Music Path: ", Style::default().fg(label_color)),
                 Span::styled("(not set)", Style::default().fg(Color::DarkGray)),
-                Span::styled("  [Enter to set]", Style::default().fg(hint_color)),
-            ])
+            ];
+            if selected {
+                spans.push(Span::styled("  [Enter to set]", Style::default().fg(hint_color)));
+            }
+            Line::from(spans)
         } else {
-            Line::from(vec![
-                Span::styled("Music Path: ", Style::default().fg(label_color).add_modifier(if selected { Modifier::BOLD } else { Modifier::empty() })),
+            let mut spans = vec![
+                Span::styled("Music Path: ", Style::default().fg(label_color)),
                 Span::styled(&self.temp_path, Style::default().fg(Color::Cyan)),
-                Span::styled("  [Enter to change]", Style::default().fg(hint_color)),
-            ])
+            ];
+            if selected {
+                spans.push(Span::styled("  [Enter to change]", Style::default().fg(hint_color)));
+            }
+            Line::from(spans)
         };
 
         f.render_widget(Paragraph::new(label), area);
