@@ -21,6 +21,8 @@ impl CliCommand for PlaylistCommand {
             return Ok(());
         }
 
+        let first_song = state.library.songs[0].clone();
+
         ui.print_message(&format!("Queueing {} songs...\n", state.library.songs.len()));
 
         let mut app = Application::new()
@@ -28,17 +30,8 @@ impl CliCommand for PlaylistCommand {
             .with_storage_backend(Box::new(storage))
             .with_ui_renderer(Box::new(TerminalRenderer::new()));
 
-        // Set up playlist in state
-        {
-            let mut app_state = app.state();
-            app_state.playback.playlist = (*state.library.songs).clone();
-            app_state.playback.current_index = Some(0);
-            app_state.library.songs = state.library.songs.clone();
-        }
-
         app.init()?;
 
-        let first_song = state.library.songs[0].clone();
         app.event_sender()
             .send(AppEvent::Playback(PlaybackEvent::PlayRequested { song: first_song }))?;
 
