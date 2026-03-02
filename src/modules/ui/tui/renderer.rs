@@ -467,7 +467,7 @@ impl TuiRenderer {
                 Span::styled("█", Style::default().fg(Color::DarkGray)),
                 Span::styled(
                     "  [Enter confirm • Esc cancel • Ctrl+U clear]",
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(Color::Yellow),
                 ),
             ])
         } else if self.temp_path.is_empty() {
