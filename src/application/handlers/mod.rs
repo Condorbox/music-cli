@@ -2,6 +2,9 @@ pub mod library_handler;
 pub mod playback_handler;
 pub mod ui_handler;
 
+#[cfg(test)]
+mod tests;
+
 use crate::application::state::AppState;
 use crate::core::events::{AppEvent, EventSender, PlaybackEvent};
 use crate::core::models::Song;
