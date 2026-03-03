@@ -206,9 +206,4 @@ impl UiRenderer for TerminalRenderer {
         self.current_elapsed = state.playback.current_elapsed;
         self.is_paused = state.playback.is_paused;
     }
-
-
-    fn as_any(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
 }

@@ -710,10 +710,6 @@ impl UiRenderer for TuiRenderer {
             self.temp_volume = amplitude_to_volume(app_state.config.volume);
         }
     }
-
-    fn as_any(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
 }
 
 

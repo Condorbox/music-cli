@@ -4,8 +4,6 @@ use crate::core::events::UiEvent;
 use crate::core::models::Song;
 use anyhow::Result;
 
-// TODO Implement volume control
-
 /// Abstraction for audio playback backend
 pub trait PlaybackBackend: Send {
     /// Play a song (replaces current playback)
@@ -74,7 +72,4 @@ pub trait UiRenderer: Send {
     fn update_state(&mut self, _state: &AppState) {
         
     }
-    
-    /// Get as Any for downcasting (needed for renderer-specific updates)
-    fn as_any(&mut self) -> &mut dyn std::any::Any;
 }

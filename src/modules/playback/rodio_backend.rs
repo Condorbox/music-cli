@@ -112,17 +112,13 @@ impl PlaybackBackend for RodioBackend {
     }
 
     fn position(&self) -> Duration {
-        if let Some(start) = self.playback_start {
-            if self.is_paused {
-                self.pause_elapsed
-            } else {
-                self.pause_elapsed + start.elapsed()
-            }
-        } else {
-            Duration::from_secs(0)
+        if self.is_paused {
+            return self.pause_elapsed;
         }
+        self.playback_start
+            .map(|start| self.pause_elapsed + start.elapsed())
+            .unwrap_or_default()
     }
-
 }
 
 // To avoid leaks
