@@ -120,11 +120,11 @@ fn next_sequential_cases() -> Vec<NextSeqCase> {
             expected_selected: Some(1),
         },
         NextSeqCase {
-            desc: "last, no loop → restarts current (Restart)",
+            desc: "last, no loop → stops",
             library_size: 5,
             current_index: Some(4),
             loop_playlist: false,
-            expected_song_title: Some("Song 4"), // replays index 4
+            expected_song_title: None,
             expected_selected: Some(4),
         },
         NextSeqCase {
@@ -152,11 +152,11 @@ fn next_sequential_cases() -> Vec<NextSeqCase> {
             expected_selected: None,
         },
         NextSeqCase {
-            desc: "single song, no loop → restart",
+            desc: "single song, no loop → stops",
             library_size: 1,
             current_index: Some(0),
             loop_playlist: false,
-            expected_song_title: Some("Song 0"),
+            expected_song_title: None,
             expected_selected: Some(0),
         },
         NextSeqCase {

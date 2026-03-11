@@ -76,7 +76,7 @@ impl<'a> HandlerContext<'a> {
                     } else if loop_playlist {
                         NavTarget::Go(0)
                     } else {
-                        NavTarget::Restart
+                        NavTarget::Nothing
                     }
                 }
                 None => NavTarget::Nothing,
