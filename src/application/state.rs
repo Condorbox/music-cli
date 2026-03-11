@@ -243,6 +243,12 @@ impl AppState {
                         self.ui.selected_index = Some(0);
                     }
                 }
+                LibraryEvent::ScanFailed { path, message } => {
+                    self.library.is_scanning = false;
+                    self.library.last_scan_path = Some(path.clone());
+                    self.ui.status_message = format!("Scan failed: {}", message);
+                    self.ui.error_message = Some(message.clone());
+                }
                 LibraryEvent::LibraryLoaded { songs } => {
                     self.library.songs = Arc::new(songs.clone());
                     if self.ui.selected_index.is_none() && !songs.is_empty() {

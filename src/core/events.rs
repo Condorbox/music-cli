@@ -64,6 +64,9 @@ pub enum LibraryEvent {
     /// Scanning completed
     ScanCompleted { songs: Vec<Song>, count: usize },
 
+    /// Scanning failed 
+    ScanFailed { path: PathBuf, message: String },
+
     /// Library loaded from storage
     LibraryLoaded { songs: Vec<Song> },
 

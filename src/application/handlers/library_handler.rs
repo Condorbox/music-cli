@@ -1,8 +1,9 @@
 use crate::application::handlers::HandlerContext;
-use crate::core::events::{AppEvent, LibraryEvent};
+use crate::core::events::{AppEvent, LibraryEvent, UiEvent};
 use crate::modules::library::search_engine::SearchEngine;
 use anyhow::Result;
 use crate::modules::library::scanner;
+use std::thread;
 
 /// Handles all [`LibraryEvent`] variants.
 ///
@@ -55,26 +56,37 @@ impl LibraryHandler {
                 ctx.event_tx
                     .send(AppEvent::Library(LibraryEvent::ScanStarted { path: path.clone() }))?;
 
-                match scanner::scan_directory(path) {
-                    Ok(songs) => {
-                        let count = songs.len();
-                        ctx.event_tx.send(AppEvent::Library(LibraryEvent::ScanCompleted {
-                            songs,
-                            count,
-                        }))?;
+                let event_tx = ctx.event_tx.clone();
+                let scan_path = path.clone();
+
+                thread::spawn(move || {
+                    match scanner::scan_directory(&scan_path) {
+                        Ok(songs) => {
+                            let count = songs.len();
+                            if let Err(err) = event_tx.send(AppEvent::Library(LibraryEvent::ScanCompleted {
+                                songs,
+                                count,
+                            })) {
+                                eprintln!("Failed to send ScanCompleted event: {}", err);
+                            }
+                        }
+                        Err(e) => {
+                            let message = e.to_string();
+                            if let Err(err) = event_tx.send(AppEvent::Library(LibraryEvent::ScanFailed {
+                                path: scan_path.clone(),
+                                message: message.clone(),
+                            })) {
+                                eprintln!("Failed to send ScanFailed event: {}", err);
+                            }
+
+                            if let Err(err) = event_tx.send(AppEvent::Ui(UiEvent::ShowError {
+                                message: format!("Scan failed: {}", message),
+                            })) {
+                                eprintln!("Failed to send ShowError event: {}", err);
+                            }
+                        }
                     }
-                    Err(e) => {
-                        ctx.event_tx.send(AppEvent::Library(LibraryEvent::ScanStarted {
-                            path: path.clone(),
-                        }))?;
-                        // Reuse the status message channel to surface the error
-                        ctx.event_tx.send(AppEvent::Ui(
-                            crate::core::events::UiEvent::ShowError {
-                                message: format!("Scan failed: {}", e),
-                            },
-                        ))?;
-                    }
-                }
+                });
             }
 
             // All other variants are handled by AppState::apply_event.
