@@ -142,7 +142,7 @@ impl UiRenderer for TerminalRenderer {
         queue!(stdout, MoveTo(0, 1))?;
 
         if let Some(song) = &self.current_song {
-            let artist = song.artist.as_deref().unwrap_or("Unknown Artist");
+            let artist = song.format_artists();
             let album = song.album.as_deref().unwrap_or("Unknown Album");
 
             write!(stdout, "  {} — {} • {}", song.title, artist, album)?;

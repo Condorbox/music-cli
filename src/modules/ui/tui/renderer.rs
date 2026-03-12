@@ -165,7 +165,7 @@ impl TuiRenderer {
                     let content = format!(
                         "[{}] {} - {} [{}]",
                         original_idx + 1,
-                        song.artist.as_deref().unwrap_or("Unknown"),
+                        song.format_artists(),
                         song.title,
                         song.format_duration()
                     );
@@ -190,7 +190,7 @@ impl TuiRenderer {
                     let content = format!(
                         "{:3}. {} - {} [{}]",
                         i + 1,
-                        song.artist.as_deref().unwrap_or("Unknown"),
+                        song.format_artists(),
                         song.title,
                         song.format_duration()
                     );
@@ -272,7 +272,7 @@ impl TuiRenderer {
                 Line::from(vec![
                     Span::raw("  "),
                     Span::styled(
-                        song.artist.as_deref().unwrap_or("Unknown Artist"),
+                        song.format_artists(),
                         Style::default().fg(Color::Cyan),
                     ),
                     Span::raw(" • "),

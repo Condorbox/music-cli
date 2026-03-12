@@ -24,7 +24,7 @@ fn make_song(title: &str) -> Song {
     Song {
         path: PathBuf::from(format!("{}.mp3", title)),
         title: title.to_owned(),
-        artist: None,
+        artists: Vec::new(),
         album: None,
         track_number: None,
         duration: None,

@@ -4,12 +4,13 @@ use std::path::{Path, PathBuf};
 use lofty::probe::Probe;
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::tag::Accessor;
+use crate::utils::{format_artists, parse_artists};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Song {
     pub path: PathBuf,
     pub title: String,
-    pub artist: Option<String>,
+    pub artists: Vec<String>,
     pub album: Option<String>,
     pub track_number: Option<u32>,
     pub duration: Option<std::time::Duration>,
@@ -32,12 +33,16 @@ impl Song {
         format!("{}:{:02}", mins, secs)
     }
 
-    fn generate_search_key(title: &str, artist: Option<&str>, album: Option<&str>) -> String {
+    pub fn format_artists(&self) -> String {
+        format_artists(&self.artists)
+    }
+
+    fn generate_search_key(title: &str, artists: &[String], album: Option<&str>) -> String {
         // We combine Title, Artist, and Album into one string.
         // This allows a query like "Pink Floyd Wall" to match effectively.
         format!("{} {} {}",
                 title,
-                artist.unwrap_or_default(),
+                artists.join(" "),
                 album.unwrap_or_default()
         ).to_lowercase()
     }
@@ -47,17 +52,20 @@ impl Song {
         let tag = tagged_file.primary_tag().or_else(|| tagged_file.first_tag());
         let title = tag.and_then(|t| t.title().map(|s| s.into_owned()))
             .unwrap_or_else(|| Self::extract_filename(path));
-        let artist = tag.and_then(|t| t.artist().map(|s| s.into_owned()));
+        let artists = tag
+            .and_then(|t| t.artist().map(|s| s.into_owned()))
+            .map(|raw| parse_artists(&raw))
+            .unwrap_or_default();
         let album = tag.and_then(|t| t.album().map(|s| s.into_owned()));
         let track_number = tag.and_then(|t| t.track());
         let duration = Some(tagged_file.properties().duration());
 
-        let search_key = Self::generate_search_key(&title, artist.as_deref(), album.as_deref());
+        let search_key = Self::generate_search_key(&title, &artists, album.as_deref());
 
         Ok(Song {
             path: path.to_path_buf(),
             title,
-            artist,
+            artists,
             album,
             track_number,
             duration,
@@ -72,7 +80,7 @@ impl Song {
         Song {
             path: path.to_path_buf(),
             title,
-            artist: None,
+            artists: Vec::new(),
             album: None,
             track_number: None,
             duration: None,
@@ -90,7 +98,8 @@ impl Song {
 
 impl fmt::Display for Song {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let duration_str = self.duration
+        let duration_str = self
+            .duration
             .map(|d| {
                 let s = d.as_secs();
                 format!("{}:{:02}", s / 60, s % 60)
@@ -100,7 +109,7 @@ impl fmt::Display for Song {
         write!(
             f,
             "{} - {} [{}]",
-            self.artist.as_deref().unwrap_or("Unknown Artist"),
+            self.format_artists(),
             self.title,
             duration_str
         )

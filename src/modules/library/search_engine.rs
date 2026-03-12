@@ -67,8 +67,14 @@ impl SearchEngine {
     fn score_song(&self, song: &Song, query: &str) -> Option<i64> {
         // Try matching against individual fields first (higher weight)
         let title_score = self.matcher.fuzzy_match(&song.title, query);
-        let artist_score = song.artist.as_ref()
-            .and_then(|a| self.matcher.fuzzy_match(a, query));
+
+        // Score each individual artist and take the best one.
+        let artist_score = song
+            .artists
+            .iter()
+            .filter_map(|a| self.matcher.fuzzy_match(a, query))
+            .max();
+
         let album_score = song.album.as_ref()
             .and_then(|a| self.matcher.fuzzy_match(a, query));
 
@@ -104,13 +110,13 @@ mod tests {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    fn make_song(title: &str, artist: Option<&str>, album: Option<&str>) -> Song {
-        let artist_str = artist.map(str::to_owned);
+    fn make_song(title: &str, artists: &[&str], album: Option<&str>) -> Song {
+        let artists: Vec<String> = artists.iter().map(|s| s.to_string()).collect();
         let album_str = album.map(str::to_owned);
         let search_key = format!(
             "{} {} {}",
             title,
-            artist_str.as_deref().unwrap_or_default(),
+            artists.join(" "),
             album_str.as_deref().unwrap_or_default()
         )
             .to_lowercase();
@@ -118,7 +124,7 @@ mod tests {
         Song {
             path: PathBuf::from(format!("{}.mp3", title)),
             title: title.to_owned(),
-            artist: artist_str,
+            artists,
             album: album_str,
             track_number: None,
             duration: None,
@@ -128,11 +134,11 @@ mod tests {
 
     fn library() -> Vec<Song> {
         vec![
-            make_song("Wish You Were Here", Some("Pink Floyd"), Some("Wish You Were Here")),
-            make_song("Comfortably Numb", Some("Pink Floyd"), Some("The Wall")),
-            make_song("Bohemian Rhapsody", Some("Queen"), Some("A Night at the Opera")),
-            make_song("Under Pressure", Some("Queen"), Some("Hot Space")),
-            make_song("Space Oddity", Some("David Bowie"), Some("Space Oddity")),
+            make_song("Wish You Were Here", &["Pink Floyd"], Some("Wish You Were Here")),
+            make_song("Comfortably Numb",   &["Pink Floyd"], Some("The Wall")),
+            make_song("Bohemian Rhapsody",  &["Queen"],      Some("A Night at the Opera")),
+            make_song("Under Pressure",     &["Queen", "David Bowie"], Some("Hot Space")),
+            make_song("Space Oddity",       &["David Bowie"], Some("Space Oddity")),
         ]
     }
 

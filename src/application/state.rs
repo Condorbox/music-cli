@@ -328,7 +328,7 @@ mod tests {
         Song {
             path: PathBuf::from(format!("{}.mp3", title)),
             title: title.to_owned(),
-            artist: Some("Test Artist".to_owned()),
+            artists: vec!["Test Artist".to_owned()],
             album: Some("Test Album".to_owned()),
             track_number: None,
             duration: None,

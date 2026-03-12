@@ -30,3 +30,51 @@ pub fn amplitude_to_volume (amplitude: f32) -> u8 {
     let x = amplitude.powf(0.25); // 4th root
     (x * 100.0).round() as u8
 }
+
+/// Separators used to split multiple artists in a raw tag string.
+///
+/// Ordered from most specific (word-boundary patterns) to least specific
+/// (single characters) so that "Black/White feat. Someone" is split at
+/// "feat." before "/" — preventing a fragment like "Black" being produced
+/// from what was really a compound title token.
+const SEPARATORS: &[&str] = &[" feat. ", " ft. ", " & ", "/", ";"];
+
+/// Parse a raw artist tag string into individual, trimmed artist names.
+///
+/// Returns an empty `Vec` when `raw` is blank or whitespace-only.
+pub fn parse_artists(raw: &str) -> Vec<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+
+    // Iteratively split through each separator, accumulating fragments.
+    let mut parts = vec![trimmed.to_owned()];
+
+    for sep in SEPARATORS {
+        parts = parts
+            .into_iter()
+            .flat_map(|p| {
+                p.split(sep)
+                    .map(str::trim)
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|s| !s.is_empty())
+            .collect();
+    }
+
+    parts
+}
+
+/// Format a slice of artist names for display.
+///
+/// Returns `"Unknown Artist"` when the slice is empty so callers never
+/// have to special-case the empty case themselves.
+pub fn format_artists(artists: &[String]) -> String {
+    if artists.is_empty() {
+        "Unknown Artist".to_owned()
+    } else {
+        artists.join(", ")
+    }
+}
