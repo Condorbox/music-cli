@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 use clap::builder::PossibleValue;
 use crate::core::models::RepeatMode;
+use crate::modules::library::sorter::SortField;
 use crate::utils::APP_NAME;
 
 #[derive(Parser)]
@@ -69,6 +70,13 @@ pub enum Commands {
         /// Repeat mode: off, all, one. If omitted, cycles to the next mode
         #[arg(value_enum)]
         mode: Option<RepeatMode>,
+    },
+
+    /// List library songs sorted by a chosen field (default: title)
+    Sort {
+        /// Field to sort by
+        #[arg(value_enum, default_value = "title")]
+        by: SortField,
     },
 }
 

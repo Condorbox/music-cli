@@ -46,6 +46,13 @@ impl TerminalRenderer {
         }
     }
 
+    pub fn print_song_list_refs(&self, songs: &[&Song]) {
+        let total = songs.len();
+        for (index, song) in songs.iter().enumerate() {
+            println!("[{}/{}] {}", index + 1, total, song);
+        }
+    }
+
     pub fn print_search_results(&self, query: &str, results: &[(usize, Song)]) {
         if results.is_empty() {
             println!("No songs found matching: '{}'", query);
