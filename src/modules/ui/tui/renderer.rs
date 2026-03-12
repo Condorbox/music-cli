@@ -21,6 +21,7 @@ use std::io::{stdout, Stdout};
 use std::sync::Arc;
 use std::time::Duration;
 use crate::core::models::RepeatMode;
+use crate::modules::library::sorter::SortField;
 use crate::modules::playback::playback_progress::PlaybackProgress;
 use crate::utils::{amplitude_to_volume, APP_NAME};
 
@@ -69,6 +70,8 @@ pub struct TuiRenderer {
     temp_path: String,
     editing_path: bool,
     path_validation: PathValidation,
+
+    active_sort: Option<SortField>,
 }
 
 impl TuiRenderer {
@@ -92,6 +95,7 @@ impl TuiRenderer {
             temp_path: String::new(),
             editing_path: false,
             path_validation: PathValidation::Idle,
+            active_sort: None,
         }
     }
 
@@ -201,18 +205,13 @@ impl TuiRenderer {
             (items, self.songs.len(), String::new())
         };
 
-        let list_title = format!(" Library ({} songs{}) ", total_count, match_info);
+        let sort_label = active_sort_label(self.active_sort);
+        let list_title = format!(" Library ({} songs{}) {} ", total_count, match_info, sort_label);
 
         let list = List::new(items)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(list_title),
-            )
+            .block(Block::default().borders(Borders::ALL).title(list_title))
             .highlight_style(
-                Style::default()
-                    .bg(Color::DarkGray)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD),
             )
             .highlight_symbol("▶ ");
 
@@ -338,6 +337,7 @@ impl TuiRenderer {
             Span::styled("/: Search • ", Style::default().fg(Color::Yellow)),
             Span::styled("F5: Refresh • ", Style::default().fg(Color::Green)),
             Span::raw("s: Settings • "),
+            Span::raw("o: Sort • "),
             Span::raw("q: Quit"),
         ])])
             .style(Style::default().fg(Color::Gray))
@@ -709,6 +709,8 @@ impl UiRenderer for TuiRenderer {
         if !self.editing_field || self.settings_selected != SettingsField::Volume {
             self.temp_volume = amplitude_to_volume(app_state.config.volume);
         }
+
+        self.active_sort    = app_state.library.active_sort;
     }
 }
 
@@ -926,6 +928,9 @@ impl TuiRenderer {
             KeyCode::F(5) | KeyCode::Char('u')=> {
                 events.push(UiEvent::RefreshRequested);
             }
+            KeyCode::Char('o') => {
+                events.push(UiEvent::SortCycleRequested);
+            }
             _ => {}
         }
     }
@@ -947,6 +952,16 @@ fn repeat_label(mode: RepeatMode) -> &'static str {
         RepeatMode::Off => "off",
         RepeatMode::All => "all",
         RepeatMode::One => "one",
+    }
+}
+
+fn active_sort_label(active_sort: Option<SortField>) -> &'static str {
+    match active_sort {
+        None                      => "",
+        Some(SortField::Title)    => "[↑ title]",
+        Some(SortField::Artist)   => "[↑ artist]",
+        Some(SortField::Album)    => "[↑ album]",
+        Some(SortField::Duration) => "[↑ duration]",
     }
 }
 

@@ -1,9 +1,11 @@
+use std::sync::Arc;
 use crate::application::handlers::HandlerContext;
 use crate::core::events::{AppEvent, LibraryEvent, UiEvent};
 use crate::modules::library::search_engine::SearchEngine;
 use anyhow::Result;
 use crate::modules::library::scanner;
 use std::thread;
+use crate::modules::library::sorter::sort_songs;
 
 /// Handles all [`LibraryEvent`] variants.
 ///
@@ -89,8 +91,47 @@ impl LibraryHandler {
                 });
             }
 
+            LibraryEvent::SortRequested { field } => {
+                let (new_selected_index, new_current_index) = {
+                    let mut state = ctx.state.lock().unwrap();
+
+                    // Record which songs are selected/playing so we can re-anchor after sort.
+                    let selected_path = state.ui.selected_index
+                        .and_then(|i| state.library.songs.get(i))
+                        .map(|s| s.path.clone());
+                    let current_path = state.playback.current_index
+                        .and_then(|i| state.library.songs.get(i))
+                        .map(|s| s.path.clone());
+
+                    // Sort into a new vec and replace the Arc.
+                    let sorted: Vec<_> = sort_songs(&state.library.songs, *field)
+                        .into_iter()
+                        .cloned()
+                        .collect();
+                    state.library.songs = Arc::new(sorted);
+
+                    // Find re-anchored positions in the new order by path.
+                    let new_selected = selected_path
+                        .and_then(|p| state.library.songs.iter().position(|s| s.path == p));
+                    let new_current = current_path
+                        .and_then(|p| state.library.songs.iter().position(|s| s.path == p));
+
+                    (new_selected, new_current)
+                };
+
+                ctx.event_tx.send(AppEvent::Library(LibraryEvent::SortChanged {
+                    field: *field,
+                    new_selected_index,
+                    new_current_index,
+                }))?;
+            }
+
             // All other variants are handled by AppState::apply_event.
-            _ => {}
+            LibraryEvent::ScanStarted { .. }
+            | LibraryEvent::ScanProgress { .. }
+            | LibraryEvent::ScanFailed { .. }
+            | LibraryEvent::SearchResults { .. }
+            | LibraryEvent::SortChanged { .. } => {}
         }
 
         Ok(())

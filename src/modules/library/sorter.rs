@@ -30,6 +30,18 @@ impl ValueEnum for SortField {
     }
 }
 
+impl SortField {
+    /// Cycle to the next field: Title → Artist → Album → Duration → Title
+    pub fn next(self) -> Self {
+        match self {
+            Self::Title    => Self::Artist,
+            Self::Artist   => Self::Album,
+            Self::Album    => Self::Duration,
+            Self::Duration => Self::Title,
+        }
+    }
+}
+
 /// Return a sorted copy of `songs` according to `field`.
 ///
 /// The original slice is never mutated — callers decide what to do with

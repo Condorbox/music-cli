@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
+use crate::modules::library::sorter::SortField;
 
 /// Complete application state (single source of truth)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +49,10 @@ pub struct LibraryState {
     /// it increments a reference count rather than heap-allocating thousands of `Song`s.
     /// A new `Arc` is only allocated when a scan replaces the list entirely.
     pub songs: Arc<Vec<Song>>,
+
+    /// The sort currently applied, or `None` if in natural OS order
+    #[serde(skip)]
+    pub active_sort: Option<SortField>,
 
     #[serde(skip)]
     pub is_scanning: bool,
@@ -119,6 +124,7 @@ impl Default for LibraryState {
     fn default() -> Self {
         Self {
             songs: Arc::new(Vec::new()),
+            active_sort: None,
             is_scanning: false,
             last_scan_path: None,
         }
@@ -142,26 +148,9 @@ impl Default for PlaybackState {
 impl Default for AppState {
     fn default() -> Self {
         Self {
-            config: ConfigState {
-                root_path: None,
-                volume: 1.0,
-                shuffle: false,
-                repeat: RepeatMode::default(),
-            },
-            library: LibraryState {
-                songs: Arc::new(Vec::new()),
-                is_scanning: false,
-                last_scan_path: None,
-            },
-            playback: PlaybackState {
-                current_song: None,
-                is_playing: false,
-                is_paused: false,
-                volume: 1.0,
-                playlist: Vec::new(),
-                current_index: None,
-                current_elapsed: Duration::from_secs(0),
-            },
+            config: ConfigState::default(),
+            library: LibraryState::default(),
+            playback: PlaybackState::default(),
             ui: UiState {
                 selected_index: None,
                 status_message: "Welcome".to_string(),
@@ -267,6 +256,14 @@ impl AppState {
                         }
                     }
                 }
+                LibraryEvent::SortChanged { field, new_selected_index, new_current_index } => {
+                    // library.songs is already the sorted vec (handler replaced it).
+                    self.library.active_sort = Some(*field);
+                    self.ui.selected_index = *new_selected_index;
+                    self.playback.current_index = *new_current_index;
+                    self.ui.status_message = format!("Sorted by {}", sort_field_label(*field));
+                }
+
                 _ => {}
             },
 
@@ -313,6 +310,15 @@ impl AppState {
 
             AppEvent::Shutdown => {}
         }
+    }
+}
+
+fn sort_field_label(field: SortField) -> &'static str {
+    match field {
+        SortField::Title    => "title",
+        SortField::Artist   => "artist",
+        SortField::Album    => "album",
+        SortField::Duration => "duration",
     }
 }
 
@@ -634,6 +640,47 @@ mod tests {
 
         assert_eq!(state.ui.selected_index, Some(3), "first result's original index must be selected");
         assert!(state.ui.status_message.contains("2") || state.ui.status_message.contains("match"));
+    }
+
+    // ── SortChanged ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn sort_changed_sets_active_sort_and_status() {
+        let mut state = state_with_songs(3);
+        apply(&mut state, AppEvent::Library(LibraryEvent::SortChanged {
+            field: SortField::Artist,
+            new_selected_index: Some(0),
+            new_current_index: None,
+        }));
+        assert_eq!(state.library.active_sort, Some(SortField::Artist));
+        assert!(state.ui.status_message.contains("artist"));
+    }
+
+    #[test]
+    fn sort_changed_re_anchors_selected_and_current() {
+        let mut state = state_with_songs(5);
+        state.ui.selected_index = Some(2);
+        state.playback.current_index = Some(4);
+
+        apply(&mut state, AppEvent::Library(LibraryEvent::SortChanged {
+            field: SortField::Title,
+            new_selected_index: Some(1), // song that was at 2 is now at 1
+            new_current_index: Some(3),  // song that was at 4 is now at 3
+        }));
+
+        assert_eq!(state.ui.selected_index, Some(1));
+        assert_eq!(state.playback.current_index, Some(3));
+    }
+
+    #[test]
+    fn scan_completed_resets_active_sort() { // TODO when update playlist restart
+        let mut state = state_with_songs(3);
+        state.library.active_sort = Some(SortField::Artist);
+        apply(&mut state, AppEvent::Library(LibraryEvent::ScanCompleted {
+            songs: vec![make_song("New")],
+            count: 1,
+        }));
+        assert!(state.library.active_sort.is_none());
     }
 
     // ── UiEvent::SelectionChanged ─────────────────────────────────────────────

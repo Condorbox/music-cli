@@ -148,6 +148,18 @@ impl UiHandler {
                 }
             }
 
+            UiEvent::SortCycleRequested => {
+                let next_field = {
+                    let state = ctx.state.lock().unwrap();
+                    match state.library.active_sort {
+                        Some(f) => f.next(),
+                        None => Default::default(),
+                    }
+                };
+                ctx.event_tx
+                    .send(AppEvent::Library(LibraryEvent::SortRequested { field: next_field }))?;
+            }
+
             UiEvent::QuitRequested => {
                 ctx.event_tx.send(AppEvent::Shutdown)?;
             }
