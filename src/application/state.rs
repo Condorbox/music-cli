@@ -226,11 +226,17 @@ impl AppState {
                     // Wrap in a new Arc — this is the only allocation on the hot path.
                     self.library.songs = Arc::new(songs.clone());
                     self.library.is_scanning = false;
+                    self.library.active_sort = None;
                     self.ui.status_message = format!("Found {} songs", count);
 
-                    if self.ui.selected_index.is_none() && !songs.is_empty() {
-                        self.ui.selected_index = Some(0);
-                    }
+                    self.ui.selected_index = if songs.is_empty() { None } else { Some(0) };
+
+                    // Stop any in-progress playback
+                    self.playback.current_song = None;
+                    self.playback.is_playing = false;
+                    self.playback.is_paused = false;
+                    self.playback.current_index = None;
+                    self.playback.current_elapsed = Duration::from_secs(0);
                 }
                 LibraryEvent::ScanFailed { path, message } => {
                     self.library.is_scanning = false;
@@ -572,7 +578,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_completed_does_not_change_existing_selection() {
+    fn scan_completed_always_resets_selection_to_first() {
         let mut state = state_with_songs(5);
         state.ui.selected_index = Some(3);
         let new_songs: Vec<Song> = (0..5).map(|i| make_song(&format!("S{}", i))).collect();
@@ -582,7 +588,26 @@ mod tests {
             count: 5,
         }));
 
-        assert_eq!(state.ui.selected_index, Some(3), "existing selection must be preserved");
+        assert_eq!(state.ui.selected_index, Some(0), "refresh always resets selection to first song");
+    }
+
+    #[test]
+    fn scan_completed_stops_playback_and_resets_playback_state() {
+        let mut state = state_with_songs(5);
+        state.playback.current_song = Some(make_song("Playing"));
+        state.playback.is_playing = true;
+        state.playback.is_paused = false;
+        state.playback.current_index = Some(3);
+
+        apply(&mut state, AppEvent::Library(LibraryEvent::ScanCompleted {
+            songs: vec![make_song("New")],
+            count: 1,
+        }));
+
+        assert!(state.playback.current_song.is_none(), "current_song must be cleared");
+        assert!(!state.playback.is_playing, "is_playing must be false");
+        assert_eq!(state.playback.current_index, None, "current_index must be cleared");
+        assert_eq!(state.playback.current_elapsed, Duration::ZERO);
     }
 
     // ── LibraryEvent::LibraryLoaded ───────────────────────────────────────────

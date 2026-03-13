@@ -28,10 +28,18 @@ impl LibraryHandler {
         match event {
             LibraryEvent::ScanCompleted { songs, .. } => {
                 let len = songs.len();
+
+                // Stop the audio engine — the playing index is now stale
+                if let Some(playback) = ctx.playback.as_mut() {
+                    playback.stop();
+                }
+
+                // Re-anchor the shuffle queue to the new library size (position 0).
                 ctx.shuffle_manager.update_playlist_size(len);
                 if ctx.shuffle_manager.is_enabled() {
                     ctx.shuffle_manager.initialize(len, None);
                 }
+
                 ctx.persist_state()?;
             }
 
