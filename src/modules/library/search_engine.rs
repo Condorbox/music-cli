@@ -129,6 +129,7 @@ mod tests {
             track_number: None,
             duration: None,
             search_key,
+            order: 0,
         }
     }
 

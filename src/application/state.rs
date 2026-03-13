@@ -264,7 +264,7 @@ impl AppState {
                 }
                 LibraryEvent::SortChanged { field, new_selected_index, new_current_index } => {
                     // library.songs is already the sorted vec (handler replaced it).
-                    self.library.active_sort = Some(*field);
+                    self.library.active_sort = *field;
                     self.ui.selected_index = *new_selected_index;
                     self.playback.current_index = *new_current_index;
                     self.ui.status_message = format!("Sorted by {}", sort_field_label(*field));
@@ -319,12 +319,13 @@ impl AppState {
     }
 }
 
-fn sort_field_label(field: SortField) -> &'static str {
+fn sort_field_label(field: Option<SortField>) -> &'static str {
     match field {
-        SortField::Title    => "title",
-        SortField::Artist   => "artist",
-        SortField::Album    => "album",
-        SortField::Duration => "duration",
+        None                      => "Natural order restored",
+        Some(SortField::Title)    => "Sorted by title",
+        Some(SortField::Artist)   => "Sorted by artist",
+        Some(SortField::Album)    => "Sorted by album",
+        Some(SortField::Duration) => "Sorted by duration",
     }
 }
 
@@ -345,6 +346,7 @@ mod tests {
             track_number: None,
             duration: None,
             search_key: title.to_lowercase(),
+            order: 0,
         }
     }
 
@@ -673,7 +675,7 @@ mod tests {
     fn sort_changed_sets_active_sort_and_status() {
         let mut state = state_with_songs(3);
         apply(&mut state, AppEvent::Library(LibraryEvent::SortChanged {
-            field: SortField::Artist,
+            field: Some(SortField::Artist),
             new_selected_index: Some(0),
             new_current_index: None,
         }));
@@ -688,7 +690,7 @@ mod tests {
         state.playback.current_index = Some(4);
 
         apply(&mut state, AppEvent::Library(LibraryEvent::SortChanged {
-            field: SortField::Title,
+            field: Some(SortField::Title),
             new_selected_index: Some(1), // song that was at 2 is now at 1
             new_current_index: Some(3),  // song that was at 4 is now at 3
         }));

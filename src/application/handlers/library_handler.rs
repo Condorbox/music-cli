@@ -103,7 +103,6 @@ impl LibraryHandler {
                 let (new_selected_index, new_current_index) = {
                     let mut state = ctx.state.lock().unwrap();
 
-                    // Record which songs are selected/playing so we can re-anchor after sort.
                     let selected_path = state.ui.selected_index
                         .and_then(|i| state.library.songs.get(i))
                         .map(|s| s.path.clone());
@@ -111,14 +110,20 @@ impl LibraryHandler {
                         .and_then(|i| state.library.songs.get(i))
                         .map(|s| s.path.clone());
 
-                    // Sort into a new vec and replace the Arc.
-                    let sorted: Vec<_> = sort_songs(&state.library.songs, *field)
-                        .into_iter()
-                        .cloned()
-                        .collect();
-                    state.library.songs = Arc::new(sorted);
+                    state.library.songs = match field {
+                        None => Arc::new({
+                            let mut natural = (*state.library.songs).clone();
+                            natural.sort_by_key(|s| s.order);
+                            natural
+                        }),
+                        Some(f) => Arc::new(
+                            sort_songs(&state.library.songs, *f)
+                                .into_iter()
+                                .cloned()
+                                .collect(),
+                        ),
+                    };
 
-                    // Find re-anchored positions in the new order by path.
                     let new_selected = selected_path
                         .and_then(|p| state.library.songs.iter().position(|s| s.path == p));
                     let new_current = current_path

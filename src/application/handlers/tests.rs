@@ -29,6 +29,7 @@ fn make_song(title: &str) -> Song {
         track_number: None,
         duration: None,
         search_key: title.to_lowercase(),
+        order: 0,
     }
 }
 

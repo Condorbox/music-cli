@@ -3,6 +3,7 @@ use crate::core::events::{AppEvent, LibraryEvent, PlaybackEvent, UiEvent};
 use crate::core::models::RepeatMode;
 use crate::utils::volume_percent_to_amplitude;
 use anyhow::Result;
+use crate::modules::library::sorter::SortField;
 
 /// Handles all [`UiEvent`] variants that require side effects.
 ///
@@ -152,8 +153,9 @@ impl UiHandler {
                 let next_field = {
                     let state = ctx.state.lock().unwrap();
                     match state.library.active_sort {
-                        Some(f) => f.next(),
-                        None => Default::default(),
+                        None => Some(SortField::default()),     // natural → title
+                        Some(SortField::Duration) => None,      // duration → natural
+                        Some(f) => Some(f.next()),     // title→artist→album→duration
                     }
                 };
                 ctx.event_tx

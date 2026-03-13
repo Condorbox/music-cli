@@ -9,7 +9,12 @@ pub fn scan_directory(root: &Path) -> Result<Vec<Song>> {
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.path().is_file() && is_audio_file(e.path()))
-        .map(|entry| Song::from_path(entry.path()))
+        .enumerate()
+        .map(|(i, entry)| {
+            let mut song = Song::from_path(entry.path());
+            song.order = i;
+            song
+        })
         .collect();
 
     Ok(songs)

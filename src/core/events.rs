@@ -78,13 +78,13 @@ pub enum LibraryEvent {
     SearchResults { results: Vec<(usize, Song)> },
 
     /// User requested a sort order change
-    SortRequested { field: SortField },
+    SortRequested { field: Option<SortField> },
 
     /// Sort has been applied. `library.songs` is already in the new order.
     /// Carries the re-anchored indices so `apply_event` can update state
     /// without needing to search the vec again.
     SortChanged {
-        field: SortField,
+        field: Option<SortField>,
         /// New position of the previously-selected song, if any.
         new_selected_index: Option<usize>,
         /// New position of the currently-playing song, if any.

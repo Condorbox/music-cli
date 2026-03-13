@@ -16,6 +16,10 @@ pub struct Song {
     pub duration: Option<std::time::Duration>,
 
     pub search_key: String,
+
+    /// Stable insertion order from the last scan. Used to restore natural order
+    #[serde(default)]
+    pub order: usize,
 }
 
 impl Song {
@@ -70,6 +74,7 @@ impl Song {
             track_number,
             duration,
             search_key,
+            order: 0
         })
     }
 
@@ -85,6 +90,7 @@ impl Song {
             track_number: None,
             duration: None,
             search_key,
+            order: 0
         }
     }
 
