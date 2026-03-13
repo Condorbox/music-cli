@@ -698,7 +698,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_completed_resets_active_sort() { // TODO when update playlist restart
+    fn scan_completed_resets_active_sort() {
         let mut state = state_with_songs(3);
         state.library.active_sort = Some(SortField::Artist);
         apply(&mut state, AppEvent::Library(LibraryEvent::ScanCompleted {

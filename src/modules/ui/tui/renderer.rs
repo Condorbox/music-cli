@@ -161,19 +161,17 @@ impl TuiRenderer {
     }
 
     fn draw_song_list(&self, f: &mut Frame, area: Rect) {
+        let current_path = self.current_song.as_ref().map(|s| &s.path);
+        // 2 border chars + 2 highlight-symbol chars ("▶ ")
+        let content_width = area.width.saturating_sub(4);
+
         let (items, total_count, match_info): (Vec<ListItem>, usize, String) = if self.search_active {
             let items: Vec<ListItem> = self
                 .search_results
                 .iter()
                 .map(|(original_idx, song)| {
-                    let content = format!(
-                        "[{}] {} - {} [{}]",
-                        original_idx + 1,
-                        song.format_artists(),
-                        song.title,
-                        song.format_duration()
-                    );
-                    ListItem::new(content)
+                    let is_current = current_path.is_some_and(|p| p == &song.path);
+                    song_list_item(original_idx + 1, song, is_current, content_width)
                 })
                 .collect();
 
@@ -191,14 +189,8 @@ impl TuiRenderer {
                 .iter()
                 .enumerate()
                 .map(|(i, song)| {
-                    let content = format!(
-                        "{:3}. {} - {} [{}]",
-                        i + 1,
-                        song.format_artists(),
-                        song.title,
-                        song.format_duration()
-                    );
-                    ListItem::new(content)
+                    let is_current = current_path.is_some_and(|p| p == &song.path);
+                    song_list_item(i + 1, song, is_current, content_width)
                 })
                 .collect();
 
@@ -211,7 +203,11 @@ impl TuiRenderer {
         let list = List::new(items)
             .block(Block::default().borders(Borders::ALL).title(list_title))
             .highlight_style(
-                Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD),
+                // DarkGray bg is kept (user's preference).
+                // BOLD ensures all span text punches through the background.
+                Style::default()
+                    .bg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD),
             )
             .highlight_symbol("▶ ");
 
@@ -983,4 +979,106 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             Constraint::Percentage((100 - percent_x) / 2),
         ])
         .split(popup_layout[1])[1]
+}
+
+fn truncate_str(s: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
+    let mut chars = s.chars();
+    let mut out = String::with_capacity(max_chars);
+    for _ in 0..max_chars {
+        match chars.next() {
+            None => return out,     // fits in full
+            Some(c) => out.push(c),
+        }
+    }
+    // There are still characters left, we truncated.
+    out.pop();
+    out.push('…');
+    out
+}
+
+
+fn song_list_item(num: usize, song: &crate::core::models::Song, is_current: bool, available_width: u16) -> ListItem<'static> {
+    const SEP: &str = "  ·  ";       // 5 chars
+    const INDEX_WIDTH: usize = 6;    // "  1.  "
+    const DURATION_WIDTH: usize = 10; // "  [59:59]" worst case
+
+    let has_artist = !song.artists.is_empty();
+    let has_album  = song.album.is_some();
+
+    let sep_count = has_artist as usize + has_album as usize;
+    let dur_width = if song.duration.is_some() { DURATION_WIDTH } else { 0 };
+
+    let text_space = (available_width as usize)
+        .saturating_sub(INDEX_WIDTH)
+        .saturating_sub(dur_width)
+        .saturating_sub(sep_count * SEP.len());
+
+    // Percentage split of the remaining text space
+    let (title_max, artist_max, album_max) = match (has_artist, has_album) {
+        (false, false) => (text_space, 0, 0),
+        (true,  false) => (text_space * 55 / 100, text_space * 45 / 100, 0),
+        (false, true)  => (text_space * 60 / 100, 0, text_space * 40 / 100),
+        (true,  true)  => (text_space * 45 / 100, text_space * 35 / 100, text_space * 20 / 100),
+    };
+
+    // Clamp: never truncate to fewer than 8 chars for title / 4 for others
+    // Fields that can't even fit 4 chars are omitted entirely
+    let title = truncate_str(&song.title, title_max.max(8));
+    let artists_str = song.format_artists();
+    let artist = (has_artist && artist_max >= 4)
+        .then(|| truncate_str(&artists_str, artist_max));
+    let album = song.album.as_ref()
+        .filter(|_| album_max >= 4)
+        .map(|a| truncate_str(a, album_max));
+
+    // ── Styles ────────────────────────────────────────────────────────────
+    // When the song is currently playing every colored element turns green
+    // The index and duration are always Gray — structural, not content
+    let (title_style, artist_style, album_style, sep_style) = if is_current {
+        (
+            Style::default().fg(Color::LightGreen).add_modifier(Modifier::BOLD),
+            Style::default().fg(Color::Green),
+            Style::default().fg(Color::Green),
+            Style::default().fg(Color::Green),
+        )
+    } else {
+        (
+            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+            Style::default().fg(Color::Cyan),
+            Style::default().fg(Color::LightBlue),
+            Style::default().fg(Color::Gray),
+        )
+    };
+
+    // Gray for structural/positional text; visible on both black bg and
+    // DarkGray highlight bg without clashing with content colors
+    let structural = Style::default().fg(Color::Gray);
+
+    // ── Assemble ─────────────────────────────────────────────────────────
+    let mut spans: Vec<Span> = Vec::with_capacity(9);
+
+    spans.push(Span::styled(format!("{:3}.  ", num), structural));
+    spans.push(Span::styled(title, title_style));
+
+    if let Some(a) = artist {
+        spans.push(Span::styled(SEP, sep_style));
+        spans.push(Span::styled(a, artist_style));
+    }
+
+    if let Some(al) = album {
+        spans.push(Span::styled(SEP, sep_style));
+        spans.push(Span::styled(al, album_style));
+    }
+
+    if song.duration.is_some() {
+        spans.push(Span::styled(
+            format!("  [{}]", song.format_duration()),
+            structural,
+        ));
+    }
+
+    ListItem::new(Line::from(spans))
 }
