@@ -1,10 +1,11 @@
 use crate::cli_handlers::CliCommand;
 use crate::core::models::Song;
-use crate::core::traits::PlaybackBackend;
+use crate::core::traits::{PlaybackBackend, StorageBackend};
 use crate::modules::playback::rodio_backend::RodioBackend;
 use crate::modules::ui::terminal::renderer::TerminalRenderer;
 use anyhow::Result;
 use std::path::PathBuf;
+use crate::modules::storage::json_backend::JsonStorageBackend;
 
 pub struct PlayCommand {
     pub file: PathBuf,
@@ -16,8 +17,12 @@ impl CliCommand for PlayCommand {
         let ui = TerminalRenderer::new();
 
         ui.print_message(&format!("Playing: {}", song.title));
+        
+        let storage = JsonStorageBackend::new()?;
+        let state = storage.load()?;
 
         let mut backend = RodioBackend::new()?;
+        backend.set_volume(state.config.volume);
         backend.play(&song)?;
 
         ui.print_message("Press Ctrl+C to stop");

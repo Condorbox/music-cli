@@ -31,7 +31,11 @@ impl CliCommand for SelectCommand {
 
         ui.print_message(&format!("Playing: {}", song.title));
 
+        let storage = JsonStorageBackend::new()?;
+        let state = storage.load()?;
+
         let mut backend = RodioBackend::new()?;
+        backend.set_volume(state.config.volume);
         backend.play(song)?;
 
         ui.print_message("Press Ctrl+C to stop");
