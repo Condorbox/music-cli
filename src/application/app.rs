@@ -10,6 +10,7 @@ use crate::application::handlers::library_handler::LibraryHandler;
 use crate::application::handlers::playback_handler::PlaybackHandler;
 use crate::application::handlers::ui_handler::UiHandler;
 use crate::modules::playback::shuffle_manager::ShuffleManager;
+use crate::utils::{EVENT_CHANNEL_CAPACITY, TICK_RATE_MS};
 
 /// Main application orchestrator
 pub struct Application {
@@ -35,7 +36,7 @@ pub struct Application {
 
 impl Application {
     pub fn new() -> Self {
-        let (tx, rx) = bounded(100);
+        let (tx, rx) = bounded(EVENT_CHANNEL_CAPACITY);
 
         Self {
             state: Arc::new(Mutex::new(AppState::default())),
@@ -138,7 +139,7 @@ impl Application {
             self.render()?;
 
             // Small sleep to prevent CPU spinning
-            std::thread::sleep(Duration::from_millis(16)); // ~60 FPS
+            std::thread::sleep(Duration::from_millis(TICK_RATE_MS));
         }
 
         Ok(())

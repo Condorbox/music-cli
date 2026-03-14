@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::builder::PossibleValue;
 use crate::core::models::RepeatMode;
 use crate::modules::library::sorter::SortField;
-use crate::utils::APP_NAME;
+use crate::utils::{APP_NAME, VOLUME_MAX};
 
 #[derive(Parser)]
 #[command(name = APP_NAME)]
@@ -54,7 +54,7 @@ pub enum Commands {
     /// Set volume between 0 and 100 (or show current if no argument)
     Volume {
         /// Volume level (0 - 100). If omitted, shows current volume
-        #[arg(value_parser = clap::value_parser!(u8).range(0..=100))]
+        #[arg(value_parser = clap::value_parser!(u8).range(0..=i64::from(VOLUME_MAX)))]
         volume: Option<u8>,
     },
 

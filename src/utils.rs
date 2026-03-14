@@ -4,6 +4,16 @@ pub const APP_NAME: &str = "music-cli";
 
 pub const SUPPORTED_EXTENSIONS: &[&str] = &["mp3", "flac", "wav", "ogg"];
 
+pub const TICK_RATE_MS: u64 = 16; // ~60 FPS event loop
+pub const PROGRESS_BAR_WIDTH: usize = 40; // terminal progress bar chars
+pub const EVENT_CHANNEL_CAPACITY: usize = 100;
+pub const MIN_TRUNCATE_TITLE: usize = 8; // TUI list item min title width
+pub const MIN_TRUNCATE_FIELD: usize = 4; // TUI list item min field width
+pub const VOLUME_MAX: u8 = 100;
+pub const VOLUME_STEP: u8 = 5;
+pub const VOLUME_CURVE_EXPONENT: i32 = 4;
+pub const CLI_PLAYBACK_POLL_MS: u64 = 100;
+
 /// Convert user volume percentage (0-100) to amplitude multiplier using perceptual scaling
 ///
 /// Human hearing is logarithmic, so we use x^4 to approximate an exponential curve.
@@ -16,8 +26,8 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &["mp3", "flac", "wav", "ogg"];
 /// # Returns
 /// * `f32` - Amplitude multiplier (0.0-1.0)
 pub fn volume_percent_to_amplitude(percent: u8) -> f32 {
-    let x = (percent as f32) / 100.0;
-    x.powi(4)
+    let x = (percent as f32) / (VOLUME_MAX as f32);
+    x.powi(VOLUME_CURVE_EXPONENT)
 }
 
 /// Convert amplitude multiplier (0.0-1.0) back to user volume percentage (0-100)
@@ -29,8 +39,8 @@ pub fn volume_percent_to_amplitude(percent: u8) -> f32 {
 /// # Returns
 /// *`u8` User volume percentage (0-100)
 pub fn amplitude_to_volume (amplitude: f32) -> u8 {
-    let x = amplitude.powf(0.25); // 4th root
-    (x * 100.0).round() as u8
+    let x = amplitude.powf(1.0 / (VOLUME_CURVE_EXPONENT as f32));
+    (x * (VOLUME_MAX as f32)).round() as u8
 }
 
 /// Separators used to split multiple artists in a raw tag string.

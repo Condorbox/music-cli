@@ -2,6 +2,7 @@ use crate::cli_handlers::context::CliContext;
 use crate::cli_handlers::CliCommand;
 use crate::core::models::Song;
 use crate::core::traits::PlaybackBackend;
+use crate::utils::CLI_PLAYBACK_POLL_MS;
 use anyhow::Result;
 use std::path::PathBuf;
 
@@ -21,7 +22,7 @@ impl CliCommand for PlayCommand {
 
         ctx.ui.print_message("Press Ctrl+C to stop");
         while ctx.backend.is_playing() {
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            std::thread::sleep(std::time::Duration::from_millis(CLI_PLAYBACK_POLL_MS));
         }
 
         ctx.ui.print_message("✓ Playback finished");

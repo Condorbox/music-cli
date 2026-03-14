@@ -23,7 +23,10 @@ use std::time::Duration;
 use crate::core::models::RepeatMode;
 use crate::modules::library::sorter::SortField;
 use crate::modules::playback::playback_progress::PlaybackProgress;
-use crate::utils::{amplitude_to_volume, repeat_label, APP_NAME};
+use crate::utils::{
+    amplitude_to_volume, repeat_label, APP_NAME, MIN_TRUNCATE_FIELD, MIN_TRUNCATE_TITLE, VOLUME_MAX,
+    VOLUME_STEP,
+};
 
 const SETTINGS_FIELDS: &[SettingsField] = &[
     SettingsField::Volume,
@@ -89,7 +92,7 @@ impl TuiRenderer {
             current_elapsed: Duration::from_secs(0),
             show_settings: false,
             settings_selected: SettingsField::Volume,
-            temp_volume: 100,
+            temp_volume: VOLUME_MAX,
             temp_repeat: RepeatMode::default(),
             editing_field: false,
             temp_path: String::new(),
@@ -733,15 +736,18 @@ impl TuiRenderer {
                 self.editing_field = false;
             }
             KeyCode::Left => {
-                self.temp_volume = self.temp_volume.saturating_sub(5);
+                self.temp_volume = self.temp_volume.saturating_sub(VOLUME_STEP);
             }
             KeyCode::Right => {
-                self.temp_volume = (self.temp_volume + 5).min(100);
+                self.temp_volume = self
+                    .temp_volume
+                    .saturating_add(VOLUME_STEP)
+                    .min(VOLUME_MAX);
             }
             KeyCode::Char(c) if c.is_ascii_digit() => {
                 let digit = c.to_digit(10).unwrap() as u8;
                 let new_val = (self.temp_volume % 10) * 10 + digit;
-                if new_val <= 100 {
+                if new_val <= VOLUME_MAX {
                     self.temp_volume = new_val;
                 }
             }
@@ -1016,14 +1022,15 @@ fn song_list_item(num: Option<usize>, song: &crate::core::models::Song, is_curre
         (true,  true)  => (text_space * 45 / 100, text_space * 35 / 100, text_space * 20 / 100),
     };
 
-    // Clamp: never truncate to fewer than 8 chars for title / 4 for others
-    // Fields that can't even fit 4 chars are omitted entirely
-    let title = truncate_str(&song.title, title_max.max(8));
+    // Clamp: never truncate to fewer than MIN_TRUNCATE_TITLE for title /
+    // MIN_TRUNCATE_FIELD for others. Fields that can't even fit
+    // MIN_TRUNCATE_FIELD chars are omitted entirely.
+    let title = truncate_str(&song.title, title_max.max(MIN_TRUNCATE_TITLE));
     let artists_str = song.format_artists();
-    let artist = (has_artist && artist_max >= 4)
+    let artist = (has_artist && artist_max >= MIN_TRUNCATE_FIELD)
         .then(|| truncate_str(&artists_str, artist_max));
     let album = song.album.as_ref()
-        .filter(|_| album_max >= 4)
+        .filter(|_| album_max >= MIN_TRUNCATE_FIELD)
         .map(|a| truncate_str(a, album_max));
 
     // ── Styles ────────────────────────────────────────────────────────────

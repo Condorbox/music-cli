@@ -4,13 +4,12 @@ use crate::core::models::Song;
 use crate::core::traits::UiRenderer;
 use crate::modules::playback::playback_progress::PlaybackProgress;
 use crate::modules::ui::progress_formatter::format_duration;
+use crate::utils::PROGRESS_BAR_WIDTH;
 use anyhow::Result;
 use crossterm::cursor::MoveTo;
 use crossterm::{event::{self, Event, KeyCode, KeyEvent}, queue, terminal::{self, Clear, ClearType}};
 use std::io::{stdout, Write};
 use std::time::Duration;
-
-const PROGRESS_BAR_WIDTH: usize = 40;
 
 pub struct TerminalRenderer {
     initialized: bool,
