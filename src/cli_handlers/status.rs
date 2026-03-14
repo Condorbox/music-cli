@@ -1,7 +1,4 @@
 use crate::cli_handlers::CliCommand;
-use crate::core::traits::StorageBackend;
-use crate::modules::storage::json_backend::JsonStorageBackend;
-use crate::modules::ui::terminal::renderer::TerminalRenderer;
 use crate::utils::{amplitude_to_volume, repeat_label, APP_NAME};
 use anyhow::Result;
 use crate::cli_handlers::context::CliContext;
