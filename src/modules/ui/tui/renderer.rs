@@ -10,10 +10,10 @@ use crossterm::{
 };
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Gauge, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Gauge, List, ListItem, ListState, Paragraph},
     Frame, Terminal,
 };
 use std::cell::RefCell;
@@ -22,9 +22,10 @@ use std::sync::Arc;
 use std::time::Duration;
 use crate::modules::library::sorter::SortField;
 use crate::modules::playback::playback_progress::PlaybackProgress;
-use crate::modules::ui::tui::settings_state::{PathValidation, SettingsField, SettingsState};
+use crate::modules::ui::tui::settings_state::SettingsState;
+use crate::modules::ui::tui::settings_view;
 use crate::utils::{
-    repeat_label, APP_NAME, MIN_TRUNCATE_FIELD, MIN_TRUNCATE_TITLE,
+    APP_NAME, MIN_TRUNCATE_FIELD, MIN_TRUNCATE_TITLE,
 };
 
 pub struct TuiRenderer {
@@ -104,7 +105,7 @@ impl TuiRenderer {
         }
 
         if self.settings.is_open() {
-            self.draw_settings_modal(f);
+            settings_view::draw(f, &self.settings);
         }
     }
 
@@ -326,175 +327,6 @@ impl TuiRenderer {
             .style(Style::default().fg(Color::Gray))
             .block(Block::default().borders(Borders::ALL).title(" Search Mode "));
         f.render_widget(paragraph, area);
-    }
-
-    fn draw_settings_modal(&self, f: &mut Frame) {
-        // Make the modal taller when path editing is active so the error line fits.
-        let height_pct = if self.settings.is_editing_path() { 60 } else { 50 };
-        let area = centered_rect(60, height_pct, f.area());
-        f.render_widget(Clear, area);
-        f.render_widget(
-            Block::default()
-                .title(" ⚙ Settings ")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Yellow)),
-            area,
-        );
-
-        let inner = Rect {
-            x: area.x + 2,
-            y: area.y + 2,
-            width: area.width.saturating_sub(4),
-            height: area.height.saturating_sub(4),
-        };
-
-        // Extra row for the inline path error when needed.
-        let path_error_height = match self.settings.path_validation() {
-            PathValidation::Error(_) => 1,
-            PathValidation::Idle => 0,
-        };
-
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),                          // Volume
-                Constraint::Length(3),                          // Repeat
-                Constraint::Length(3),                          // Music Path input
-                Constraint::Length(path_error_height),          // Inline error (0 or 1)
-                Constraint::Min(0),                             // spacer
-                Constraint::Length(2),                          // help
-            ])
-            .split(inner);
-
-        self.draw_settings_volume(f, chunks[0]);
-        self.draw_settings_repeat(f, chunks[1]);
-        self.draw_settings_path(f, chunks[2]);
-        self.draw_settings_path_error(f, chunks[3]);
-        self.draw_settings_help(f, chunks[5]);
-    }
-
-    fn draw_settings_volume(&self, f: &mut Frame, area: Rect) {
-        let selected = self.settings.selected() == SettingsField::Volume;
-        let editing = selected && self.settings.is_editing_volume();
-
-        let label = if editing {
-            format!(
-                "Volume: {}%  [←/→ adjust • 0-9 type • Enter confirm • Esc cancel]",
-                self.settings.temp_volume()
-            )
-        } else {
-            format!("Volume: {}%", self.settings.temp_volume())
-        };
-
-        f.render_widget(
-            Paragraph::new(label).style(field_style(selected)),
-            area,
-        );
-    }
-
-    fn draw_settings_repeat(&self, f: &mut Frame, area: Rect) {
-        let selected = self.settings.selected() == SettingsField::Repeat;
-
-        let label = if selected {
-            let temp_repeat = self.settings.temp_repeat();
-            format!(
-                "Repeat: {} {}  [←/→ or Enter to cycle]",
-                temp_repeat.symbol(),
-                repeat_label(temp_repeat),
-            )
-        } else {
-            let temp_repeat = self.settings.temp_repeat();
-            format!(
-                "Repeat: {} {}",
-                temp_repeat.symbol(),
-                repeat_label(temp_repeat),
-            )
-        };
-
-        f.render_widget(
-            Paragraph::new(label).style(field_style(selected)),
-            area,
-        );
-    }
-
-    fn draw_settings_path(&self, f: &mut Frame, area: Rect) {
-        let selected = self.settings.selected() == SettingsField::MusicPath;
-
-        // The "label" color drives the key text ("Music Path:") and hint.
-        // When selected: yellow. When not: white.
-        let label_color = if selected { Color::Yellow } else { Color::White };
-        // Hint text is always a dimmer shade of whatever the label color is.
-        let hint_color = if selected { Color::Yellow } else { Color::DarkGray };
-
-        let label: Line = if self.settings.is_editing_path() {
-            Line::from(vec![
-                Span::styled("Music Path: ", Style::default().fg(label_color).add_modifier(Modifier::BOLD)),
-                Span::styled(self.settings.temp_path(), Style::default().fg(Color::White)),
-                Span::styled("█", Style::default().fg(Color::DarkGray)),
-                Span::styled(
-                    "  [Enter confirm • Esc cancel • Ctrl+U clear]",
-                    Style::default().fg(Color::Yellow),
-                ),
-            ])
-        } else if self.settings.temp_path().is_empty() {
-            let mut spans = vec![
-                Span::styled("Music Path: ", Style::default().fg(label_color)),
-                Span::styled("(not set)", Style::default().fg(Color::DarkGray)),
-            ];
-            if selected {
-                spans.push(Span::styled("  [Enter to set]", Style::default().fg(hint_color)));
-            }
-            Line::from(spans)
-        } else {
-            let mut spans = vec![
-                Span::styled("Music Path: ", Style::default().fg(label_color)),
-                Span::styled(self.settings.temp_path(), Style::default().fg(Color::Cyan)),
-            ];
-            if selected {
-                spans.push(Span::styled("  [Enter to change]", Style::default().fg(hint_color)));
-            }
-            Line::from(spans)
-        };
-
-        f.render_widget(Paragraph::new(label), area);
-    }
-
-    /// Renders the inline error line directly below the path field.
-    /// Renders nothing (zero-height) when there is no error.
-    fn draw_settings_path_error(&self, f: &mut Frame, area: Rect) {
-        if let PathValidation::Error(msg) = self.settings.path_validation() {
-            f.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("  ✗ ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
-                    Span::styled(msg.as_str(), Style::default().fg(Color::Red)),
-                ])),
-                area,
-            );
-        }
-    }
-
-    fn draw_settings_help(&self, f: &mut Frame, area: Rect) {
-        let text = if self.settings.is_editing_volume() {
-            "←/→: Adjust  •  0-9: Type value  •  Enter: Confirm  •  Esc: Cancel"
-        } else if self.settings.is_editing_path() {
-            "Type path  •  Enter: Confirm  •  Esc: Cancel  •  Ctrl+U: Clear"
-        } else {
-            match self.settings.selected() {
-                SettingsField::Volume =>
-                    "↑/↓: Navigate  •  Enter: Edit volume  •  s/Esc: Close",
-                SettingsField::Repeat =>
-                    "↑/↓: Navigate  •  ←/→ or Enter: Cycle mode  •  s/Esc: Close",
-                SettingsField::MusicPath =>
-                    "↑/↓: Navigate  •  Enter: Edit path  •  s/Esc: Close",
-            }
-        };
-
-        f.render_widget(
-            Paragraph::new(text)
-                .style(Style::default().fg(Color::DarkGray))
-                .alignment(Alignment::Center),
-            area,
-        );
     }
 
     fn navigate_up(&mut self) -> Option<usize> {
@@ -740,17 +572,6 @@ impl TuiRenderer {
     }
 }
 
-// Style for a settings field row — highlighted when selected.
-fn field_style(selected: bool) -> Style {
-    if selected {
-        Style::default()
-            .fg(Color::Yellow)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::White)
-    }
-}
-
 fn active_sort_label(active_sort: Option<SortField>) -> &'static str {
     match active_sort {
         None                      => "",
@@ -759,26 +580,6 @@ fn active_sort_label(active_sort: Option<SortField>) -> &'static str {
         Some(SortField::Album)    => "[↑ album]",
         Some(SortField::Duration) => "[↑ duration]",
     }
-}
-
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
 }
 
 fn truncate_str(s: &str, max_chars: usize) -> String {
