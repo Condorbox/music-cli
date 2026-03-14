@@ -1,5 +1,4 @@
 use crate::cli_handlers::CliCommand;
-use crate::core::models::RepeatMode;
 use crate::core::traits::StorageBackend;
 use crate::modules::storage::json_backend::JsonStorageBackend;
 use crate::modules::ui::terminal::renderer::TerminalRenderer;
