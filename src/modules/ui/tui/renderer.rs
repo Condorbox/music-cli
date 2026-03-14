@@ -20,35 +20,12 @@ use std::cell::RefCell;
 use std::io::{stdout, Stdout};
 use std::sync::Arc;
 use std::time::Duration;
-use crate::core::models::RepeatMode;
 use crate::modules::library::sorter::SortField;
 use crate::modules::playback::playback_progress::PlaybackProgress;
+use crate::modules::ui::tui::settings_state::{PathValidation, SettingsField, SettingsState};
 use crate::utils::{
-    amplitude_to_volume, repeat_label, APP_NAME, MIN_TRUNCATE_FIELD, MIN_TRUNCATE_TITLE, VOLUME_MAX,
-    VOLUME_STEP,
+    repeat_label, APP_NAME, MIN_TRUNCATE_FIELD, MIN_TRUNCATE_TITLE,
 };
-
-const SETTINGS_FIELDS: &[SettingsField] = &[
-    SettingsField::Volume,
-    SettingsField::Repeat,
-    SettingsField::MusicPath,
-];
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum SettingsField {
-    MusicPath,
-    Volume,
-    Repeat
-}
-
-/// Inline validation state for the path field.
-#[derive(Debug, Clone, PartialEq)]
-enum PathValidation {
-    /// User hasn't tried to confirm yet, or is still typing.
-    Idle,
-    /// Last confirm attempt failed
-    Error(String),
-}
 
 pub struct TuiRenderer {
     terminal: Option<Terminal<CrosstermBackend<Stdout>>>,
@@ -64,15 +41,7 @@ pub struct TuiRenderer {
     search_results: Vec<(usize, crate::core::models::Song)>,
     shuffle: bool,
 
-    // Settings modal state (UI-only)
-    show_settings: bool,
-    settings_selected: SettingsField,
-    temp_volume: u8,
-    temp_repeat: RepeatMode,
-    editing_field: bool,
-    temp_path: String,
-    editing_path: bool,
-    path_validation: PathValidation,
+    settings: SettingsState,
 
     active_sort: Option<SortField>,
 }
@@ -90,14 +59,7 @@ impl TuiRenderer {
             search_results: Vec::new(),
             shuffle: false,
             current_elapsed: Duration::from_secs(0),
-            show_settings: false,
-            settings_selected: SettingsField::Volume,
-            temp_volume: VOLUME_MAX,
-            temp_repeat: RepeatMode::default(),
-            editing_field: false,
-            temp_path: String::new(),
-            editing_path: false,
-            path_validation: PathValidation::Idle,
+            settings: SettingsState::default(),
             active_sort: None,
         }
     }
@@ -141,7 +103,7 @@ impl TuiRenderer {
             self.draw_controls(f, chunks[3]);
         }
 
-        if self.show_settings {
+        if self.settings.is_open() {
             self.draw_settings_modal(f);
         }
     }
@@ -172,7 +134,7 @@ impl TuiRenderer {
             let items: Vec<ListItem> = self
                 .search_results
                 .iter()
-                .map(|(original_idx, song)| {
+                .map(|(_original_idx, song)| {
                     let is_current = current_path.is_some_and(|p| p == &song.path);
                     song_list_item(None, song, is_current, content_width)
                 })
@@ -368,7 +330,7 @@ impl TuiRenderer {
 
     fn draw_settings_modal(&self, f: &mut Frame) {
         // Make the modal taller when path editing is active so the error line fits.
-        let height_pct = if self.editing_path { 60 } else { 50 };
+        let height_pct = if self.settings.is_editing_path() { 60 } else { 50 };
         let area = centered_rect(60, height_pct, f.area());
         f.render_widget(Clear, area);
         f.render_widget(
@@ -387,7 +349,7 @@ impl TuiRenderer {
         };
 
         // Extra row for the inline path error when needed.
-        let path_error_height = match &self.path_validation {
+        let path_error_height = match self.settings.path_validation() {
             PathValidation::Error(_) => 1,
             PathValidation::Idle => 0,
         };
@@ -412,13 +374,16 @@ impl TuiRenderer {
     }
 
     fn draw_settings_volume(&self, f: &mut Frame, area: Rect) {
-        let selected = self.settings_selected == SettingsField::Volume;
-        let editing = selected && self.editing_field;
+        let selected = self.settings.selected() == SettingsField::Volume;
+        let editing = selected && self.settings.is_editing_volume();
 
         let label = if editing {
-            format!("Volume: {}%  [←/→ adjust • 0-9 type • Enter confirm • Esc cancel]", self.temp_volume)
+            format!(
+                "Volume: {}%  [←/→ adjust • 0-9 type • Enter confirm • Esc cancel]",
+                self.settings.temp_volume()
+            )
         } else {
-            format!("Volume: {}%", self.temp_volume)
+            format!("Volume: {}%", self.settings.temp_volume())
         };
 
         f.render_widget(
@@ -428,19 +393,21 @@ impl TuiRenderer {
     }
 
     fn draw_settings_repeat(&self, f: &mut Frame, area: Rect) {
-        let selected = self.settings_selected == SettingsField::Repeat;
+        let selected = self.settings.selected() == SettingsField::Repeat;
 
         let label = if selected {
+            let temp_repeat = self.settings.temp_repeat();
             format!(
                 "Repeat: {} {}  [←/→ or Enter to cycle]",
-                self.temp_repeat.symbol(),
-                repeat_label(self.temp_repeat),
+                temp_repeat.symbol(),
+                repeat_label(temp_repeat),
             )
         } else {
+            let temp_repeat = self.settings.temp_repeat();
             format!(
                 "Repeat: {} {}",
-                self.temp_repeat.symbol(),
-                repeat_label(self.temp_repeat),
+                temp_repeat.symbol(),
+                repeat_label(temp_repeat),
             )
         };
 
@@ -451,7 +418,7 @@ impl TuiRenderer {
     }
 
     fn draw_settings_path(&self, f: &mut Frame, area: Rect) {
-        let selected = self.settings_selected == SettingsField::MusicPath;
+        let selected = self.settings.selected() == SettingsField::MusicPath;
 
         // The "label" color drives the key text ("Music Path:") and hint.
         // When selected: yellow. When not: white.
@@ -459,17 +426,17 @@ impl TuiRenderer {
         // Hint text is always a dimmer shade of whatever the label color is.
         let hint_color = if selected { Color::Yellow } else { Color::DarkGray };
 
-        let label: Line = if self.editing_path {
+        let label: Line = if self.settings.is_editing_path() {
             Line::from(vec![
                 Span::styled("Music Path: ", Style::default().fg(label_color).add_modifier(Modifier::BOLD)),
-                Span::styled(&self.temp_path, Style::default().fg(Color::White)),
+                Span::styled(self.settings.temp_path(), Style::default().fg(Color::White)),
                 Span::styled("█", Style::default().fg(Color::DarkGray)),
                 Span::styled(
                     "  [Enter confirm • Esc cancel • Ctrl+U clear]",
                     Style::default().fg(Color::Yellow),
                 ),
             ])
-        } else if self.temp_path.is_empty() {
+        } else if self.settings.temp_path().is_empty() {
             let mut spans = vec![
                 Span::styled("Music Path: ", Style::default().fg(label_color)),
                 Span::styled("(not set)", Style::default().fg(Color::DarkGray)),
@@ -481,7 +448,7 @@ impl TuiRenderer {
         } else {
             let mut spans = vec![
                 Span::styled("Music Path: ", Style::default().fg(label_color)),
-                Span::styled(&self.temp_path, Style::default().fg(Color::Cyan)),
+                Span::styled(self.settings.temp_path(), Style::default().fg(Color::Cyan)),
             ];
             if selected {
                 spans.push(Span::styled("  [Enter to change]", Style::default().fg(hint_color)));
@@ -495,7 +462,7 @@ impl TuiRenderer {
     /// Renders the inline error line directly below the path field.
     /// Renders nothing (zero-height) when there is no error.
     fn draw_settings_path_error(&self, f: &mut Frame, area: Rect) {
-        if let PathValidation::Error(msg) = &self.path_validation {
+        if let PathValidation::Error(msg) = self.settings.path_validation() {
             f.render_widget(
                 Paragraph::new(Line::from(vec![
                     Span::styled("  ✗ ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
@@ -507,12 +474,12 @@ impl TuiRenderer {
     }
 
     fn draw_settings_help(&self, f: &mut Frame, area: Rect) {
-        let text = if self.editing_field {
+        let text = if self.settings.is_editing_volume() {
             "←/→: Adjust  •  0-9: Type value  •  Enter: Confirm  •  Esc: Cancel"
-        } else if self.editing_path {
+        } else if self.settings.is_editing_path() {
             "Type path  •  Enter: Confirm  •  Esc: Cancel  •  Ctrl+U: Clear"
         } else {
-            match self.settings_selected {
+            match self.settings.selected() {
                 SettingsField::Volume =>
                     "↑/↓: Navigate  •  Enter: Edit volume  •  s/Esc: Close",
                 SettingsField::Repeat =>
@@ -586,25 +553,6 @@ impl TuiRenderer {
         self.get_original_index(new_idx)
     }
 
-    fn settings_navigate_up(&mut self) {
-        let current = SETTINGS_FIELDS
-            .iter()
-            .position(|f| *f == self.settings_selected)
-            .unwrap_or(0);
-        let prev = (current + SETTINGS_FIELDS.len() - 1) % SETTINGS_FIELDS.len();
-        self.settings_selected = SETTINGS_FIELDS[prev];
-    }
-
-    fn settings_navigate_down(&mut self) {
-        let current = SETTINGS_FIELDS
-            .iter()
-            .position(|f| *f == self.settings_selected)
-            .unwrap_or(0);
-        let next = (current + 1) % SETTINGS_FIELDS.len();
-        self.settings_selected = SETTINGS_FIELDS[next];
-    }
-
-
     fn get_original_index(&self, display_idx: usize) -> Option<usize> {
         if self.search_active {
             self.search_results.get(display_idx).map(|(orig_idx, _)| *orig_idx)
@@ -652,8 +600,8 @@ impl UiRenderer for TuiRenderer {
             return Ok(events);
         };
 
-        if self.show_settings {
-            self.handle_settings_input(key, &mut events);
+        if self.settings.is_open() {
+            events.extend(self.settings.handle_key(key));
         } else if self.search_active {
             self.handle_search_input(key, &mut events);
         } else {
@@ -677,19 +625,7 @@ impl UiRenderer for TuiRenderer {
 
         // Sync shuffle state
         self.shuffle = app_state.config.shuffle;
-
-        // Sync repeat — always safe since it has no confirm-step editing mode.
-        self.temp_repeat = app_state.config.repeat;
-
-        // Sync path — only when not actively editing, same pattern as volume.
-        if !self.editing_path {
-            self.temp_path = app_state
-                .config
-                .root_path
-                .as_ref()
-                .map(|p| p.to_string_lossy().into_owned())
-                .unwrap_or_default();
-        }
+        self.settings.sync_from_app_state(app_state);
 
         // Update selected index
         if let Some(index) = app_state.ui.selected_index {
@@ -704,145 +640,11 @@ impl UiRenderer for TuiRenderer {
             }
         }
 
-        // Update temp volume
-        if !self.editing_field || self.settings_selected != SettingsField::Volume {
-            self.temp_volume = amplitude_to_volume(app_state.config.volume);
-        }
-
         self.active_sort    = app_state.library.active_sort;
     }
 }
 
-
 impl TuiRenderer {
-    fn handle_settings_input(&mut self, key: event::KeyEvent, events: &mut Vec<UiEvent>) {
-        if self.editing_path {
-            self.handle_path_editing_input(key, events);
-        } else if self.editing_field {
-            self.handle_settings_editing_input(key, events);
-        } else {
-            self.handle_settings_navigation_input(key, events);
-        }
-    }
-
-    fn handle_settings_editing_input(&mut self, key: event::KeyEvent, events: &mut Vec<UiEvent>) {
-        // Only Volume uses confirm-step editing.
-        match key.code {
-            KeyCode::Enter => {
-                self.editing_field = false;
-                events.push(UiEvent::VolumeChangeRequested { volume: self.temp_volume });
-            }
-            KeyCode::Esc => {
-                self.editing_field = false;
-            }
-            KeyCode::Left => {
-                self.temp_volume = self.temp_volume.saturating_sub(VOLUME_STEP);
-            }
-            KeyCode::Right => {
-                self.temp_volume = self
-                    .temp_volume
-                    .saturating_add(VOLUME_STEP)
-                    .min(VOLUME_MAX);
-            }
-            KeyCode::Char(c) if c.is_ascii_digit() => {
-                let digit = c.to_digit(10).unwrap() as u8;
-                let new_val = (self.temp_volume % 10) * 10 + digit;
-                if new_val <= VOLUME_MAX {
-                    self.temp_volume = new_val;
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn handle_path_editing_input(&mut self, key: event::KeyEvent, events: &mut Vec<UiEvent>) {
-        match key.code {
-            KeyCode::Enter => {
-                let path = std::path::Path::new(&self.temp_path);
-                if self.temp_path.is_empty() {
-                    self.path_validation =
-                        PathValidation::Error("Path cannot be empty.".to_string());
-                } else if !path.exists() {
-                    self.path_validation =
-                        PathValidation::Error("Path does not exist.".to_string());
-                } else if !path.is_dir() {
-                    self.path_validation =
-                        PathValidation::Error("Path is not a directory.".to_string());
-                } else {
-                    // Valid — emit event and exit edit mode cleanly.
-                    self.editing_path = false;
-                    self.path_validation = PathValidation::Idle;
-                    events.push(UiEvent::PathChangeRequested {
-                        path: path.to_path_buf(),
-                    });
-                }
-            }
-            KeyCode::Esc => {
-                // Cancel: restore last known-good value on next update_state tick.
-                self.editing_path = false;
-                self.path_validation = PathValidation::Idle;
-            }
-            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.temp_path.clear();
-                // Clear error feedback when the user starts correcting.
-                self.path_validation = PathValidation::Idle;
-            }
-            KeyCode::Backspace => {
-                self.temp_path.pop();
-                // Clear stale error as soon as the user modifies the input.
-                self.path_validation = PathValidation::Idle;
-            }
-            KeyCode::Char(c) => {
-                self.temp_path.push(c);
-                // Clear stale error as soon as the user modifies the input.
-                self.path_validation = PathValidation::Idle;
-            }
-            _ => {}
-        }
-    }
-
-
-    fn handle_settings_navigation_input(&mut self, key: event::KeyEvent, events: &mut Vec<UiEvent>) {
-        match key.code {
-            KeyCode::Char('s') | KeyCode::Esc => {
-                self.show_settings = false;
-            }
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.settings_navigate_up();
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.settings_navigate_down();
-            }
-            KeyCode::Enter => match self.settings_selected {
-                SettingsField::Volume => {
-                    self.editing_field = true;
-                }
-                SettingsField::Repeat => {
-                    // Enter cycles forward — no confirm step needed.
-                    self.temp_repeat = self.temp_repeat.cycle();
-                    events.push(UiEvent::RepeatChangeRequested { mode: self.temp_repeat });
-                }
-                SettingsField::MusicPath => {
-                    self.editing_path = true;
-                    self.path_validation = PathValidation::Idle;
-                }
-            },
-            KeyCode::Left => {
-                if self.settings_selected == SettingsField::Repeat {
-                    self.temp_repeat = self.temp_repeat.cycle_back();
-                    events.push(UiEvent::RepeatChangeRequested { mode: self.temp_repeat });
-                }
-            }
-            KeyCode::Right => {
-                if self.settings_selected == SettingsField::Repeat {
-                    self.temp_repeat = self.temp_repeat.cycle();
-                    events.push(UiEvent::RepeatChangeRequested { mode: self.temp_repeat });
-                }
-            }
-            _ => {}
-        }
-    }
-
     fn handle_search_input(&mut self, key: event::KeyEvent, events: &mut Vec<UiEvent>) {
         match key.code {
             KeyCode::Esc => {
@@ -890,7 +692,7 @@ impl TuiRenderer {
                 events.push(UiEvent::QuitRequested);
             }
             KeyCode::Char('s') => {
-                self.show_settings = true;
+                self.settings.open();
             }
             KeyCode::Char('/') => {
                 if !self.songs.is_empty() {
