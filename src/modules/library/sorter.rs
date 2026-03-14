@@ -1,8 +1,9 @@
 use clap::builder::PossibleValue;
 use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 use crate::core::models::Song;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum SortField {
     /// Alphabetical by track title (default).
     #[default]

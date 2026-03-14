@@ -51,7 +51,7 @@ pub struct LibraryState {
     pub songs: Arc<Vec<Song>>,
 
     /// The sort currently applied, or `None` if in natural OS order
-    #[serde(skip)]
+    #[serde(default)]
     pub active_sort: Option<SortField>,
 
     #[serde(skip)]

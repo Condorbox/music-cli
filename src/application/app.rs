@@ -89,6 +89,7 @@ impl Application {
                     let volume = loaded_state.config.volume;
                     let shuffle_enabled = loaded_state.config.shuffle;
                     let playlist_size = loaded_state.library.songs.len();
+                    let active_sort = loaded_state.library.active_sort;
                     *self.state.lock().unwrap() = loaded_state;
 
                     // Set volume on playback backend
@@ -106,6 +107,11 @@ impl Application {
                     let songs = (*self.state.lock().unwrap().library.songs).clone();
                     self.event_tx
                         .send(AppEvent::Library(LibraryEvent::LibraryLoaded { songs }))?;
+
+                    if active_sort.is_some() {
+                        self.event_tx
+                            .send(AppEvent::Library(LibraryEvent::SortRequested {field: active_sort}))?;
+                    }
                 }
                 Err(e) => {
                     eprintln!("Warning: Could not load state: {}", e);
