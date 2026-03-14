@@ -25,7 +25,7 @@ pub struct Application {
     ui_renderer: Option<Box<dyn UiRenderer>>,
 
     // Keep track of running state
-    running: Arc<Mutex<bool>>,
+    running: bool,
 
     // Handlers
     playback_handler: PlaybackHandler,
@@ -45,7 +45,7 @@ impl Application {
             playback_backend: None,
             storage_backend: None,
             ui_renderer: None,
-            running: Arc::new(Mutex::new(false)),
+            running: false,
             playback_handler: PlaybackHandler,
             library_handler: LibraryHandler::new(),
             ui_handler: UiHandler,
@@ -129,9 +129,9 @@ impl Application {
 
     /// Run the main event loop
     pub fn run(&mut self) -> Result<()> {
-        *self.running.lock().unwrap() = true;
+        self.running = true;
 
-        while *self.running.lock().unwrap() {
+        while self.running {
             self.process_events()?;
             self.poll_ui_input()?;
             self.tick_playback()?;
@@ -219,7 +219,7 @@ impl Application {
             AppEvent::Playback(pe) => self.playback_handler.handle(pe, &mut ctx)?,
             AppEvent::Library(le) => self.library_handler.handle(le, &mut ctx)?,
             AppEvent::Ui(ue) => self.ui_handler.handle(ue, &mut ctx)?,
-            AppEvent::Shutdown => *self.running.lock().unwrap() = false,
+            AppEvent::Shutdown => self.running = false,
         }
 
         Ok(())
