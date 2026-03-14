@@ -78,6 +78,9 @@ pub enum Commands {
         #[arg(value_enum, default_value = "title")]
         by: SortField,
     },
+
+    /// Show the current status of the player
+    Status,
 }
 
 impl ValueEnum for RepeatMode {

@@ -1,3 +1,5 @@
+use crate::core::models::RepeatMode;
+
 pub const APP_NAME: &str = "music-cli";
 
 pub const SUPPORTED_EXTENSIONS: &[&str] = &["mp3", "flac", "wav", "ogg"];
@@ -76,5 +78,13 @@ pub fn format_artists(artists: &[String]) -> String {
         "Unknown Artist".to_owned()
     } else {
         artists.join(", ")
+    }
+}
+
+pub fn repeat_label(mode: RepeatMode) -> &'static str {
+    match mode {
+        RepeatMode::Off => "Off",
+        RepeatMode::All => "All",
+        RepeatMode::One => "One",
     }
 }

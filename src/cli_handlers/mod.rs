@@ -8,6 +8,7 @@ mod search;
 mod select;
 mod settings;
 mod sort;
+mod status;
 
 pub use browse::BrowseCommand;
 pub use list::ListCommand;
@@ -19,6 +20,7 @@ pub use search::SearchCommand;
 pub use select::SelectCommand;
 pub use settings::{LoopCommand, ShuffleCommand, VolumeCommand};
 pub use sort::SortCommand;
+pub use status::StatusCommand;
 
 use crate::cli::Commands;
 use anyhow::Result;
@@ -47,5 +49,6 @@ pub fn from_cli(cmd: Commands) -> Box<dyn CliCommand> {
         Commands::Shuffle { enabled } => Box::new(ShuffleCommand { enabled }),
         Commands::Loop { mode } => Box::new(LoopCommand { mode }),
         Commands::Sort { by } => Box::new(SortCommand { field: by }),
+        Commands::Status => Box::new(StatusCommand),
     }
 }

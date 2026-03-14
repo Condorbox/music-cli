@@ -23,7 +23,7 @@ use std::time::Duration;
 use crate::core::models::RepeatMode;
 use crate::modules::library::sorter::SortField;
 use crate::modules::playback::playback_progress::PlaybackProgress;
-use crate::utils::{amplitude_to_volume, APP_NAME};
+use crate::utils::{amplitude_to_volume, repeat_label, APP_NAME};
 
 const SETTINGS_FIELDS: &[SettingsField] = &[
     SettingsField::Volume,
@@ -940,14 +940,6 @@ fn field_style(selected: bool) -> Style {
             .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::White)
-    }
-}
-
-fn repeat_label(mode: RepeatMode) -> &'static str {
-    match mode {
-        RepeatMode::Off => "off",
-        RepeatMode::All => "all",
-        RepeatMode::One => "one",
     }
 }
 
