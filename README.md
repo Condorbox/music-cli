@@ -124,13 +124,13 @@ music-cli sort artist
 
 ## Keymap configuration (`keymap.toml`)
 
-You can override the default TUI key bindings by creating:
+You can override the default TUI key bindings by editing:
 
 - `<config dir>/music-cli/keymap.toml`
 
-If the file is missing, `music-cli` uses the compiled-in defaults (silently). If the file
-exists but is invalid TOML, `music-cli` prints a warning to stderr and falls back to
-defaults.
+If the file is missing, `music-cli` creates it with the compiled-in defaults and uses
+those defaults. If the file exists but is invalid TOML, `music-cli` prints a warning to
+stderr and falls back to defaults.
 
 ### Format
 
@@ -142,21 +142,36 @@ Example:
 
 ```toml
 [normal]
-quit         = ["q", "Esc", "Ctrl+c"]
+quit = ["q", "Esc", "Ctrl+c"]
 open_settings = "s"
-enter_search  = ["/", "Ctrl+f"]
+enter_search = ["/", "Ctrl+f"]
+navigate_up = ["Up", "k"]
+navigate_down = ["Down", "j"]
+play_selected = "Enter"
+toggle_pause = ["Space", "p"]
+next_track = ["n", "Right"]
+prev_track = ["b", "Left"]
+toggle_shuffle = "r"
+refresh = ["F5", "u"]
+cycle_sort = "o"
 
 [search]
-search_exit  = "Esc"
-clear_line   = "Ctrl+u"
+search_exit = "Esc"
 toggle_pause = "Ctrl+Space"
+clear_line = "Ctrl+u"
+navigate_up = "Up"
+navigate_down = "Down"
+play_selected = "Enter"
 
 [settings]
-settings_close   = ["s", "Esc"]
+settings_close = ["Esc", "s"]
 settings_confirm = "Enter"
-navigate_up      = ["Up", "k"]
-navigate_down    = ["Down", "j"]
-clear_line       = "Ctrl+u"
+settings_left = "Left"
+settings_right = "Right"
+clear_line = "Ctrl+u"
+navigate_up = ["Up", "k"]
+navigate_down = ["Down", "j"]
+
 ```
 
 ### Supported actions
