@@ -6,7 +6,7 @@ use crate::modules::playback::playback_progress::PlaybackProgress;
 use crate::modules::ui::progress_formatter::format_duration;
 use anyhow::Result;
 use crossterm::cursor::MoveTo;
-use crossterm::{event::{self, Event, KeyCode, KeyEvent}, execute, queue, terminal::{self, Clear, ClearType, LeaveAlternateScreen}};
+use crossterm::{event::{self, Event, KeyCode, KeyEvent}, queue, terminal::{self, Clear, ClearType}};
 use std::io::{stdout, Write};
 use std::time::Duration;
 
@@ -108,7 +108,7 @@ impl UiRenderer for TerminalRenderer {
 
     fn cleanup(&mut self) -> Result<()> {
         if self.initialized {
-            execute!(stdout(), LeaveAlternateScreen)?;
+            // execute!(stdout(), LeaveAlternateScreen)?;
             terminal::disable_raw_mode()?;
             self.initialized = false;
         }

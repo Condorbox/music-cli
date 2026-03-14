@@ -72,11 +72,6 @@ pub struct PlaybackState {
     #[serde(skip)]
     pub is_paused: bool,
 
-    pub volume: f32,
-
-    #[serde(skip)]
-    pub playlist: Vec<Song>,
-
     #[serde(skip)]
     pub current_index: Option<usize>,
 
@@ -137,8 +132,6 @@ impl Default for PlaybackState {
             current_song: None,
             is_playing: false,
             is_paused: false,
-            volume: default_volume(),
-            playlist: Vec::new(),
             current_index: None,
             current_elapsed: Duration::from_secs(0),
         }
@@ -197,7 +190,6 @@ impl AppState {
                     // Don't clear current_song - might still want to display it
                 }
                 PlaybackEvent::VolumeChanged { volume } => {
-                    self.playback.volume = *volume;
                     self.config.volume = *volume;
                 }
                 PlaybackEvent::Error { message } => {
@@ -471,14 +463,12 @@ mod tests {
     // ── PlaybackEvent::VolumeChanged ──────────────────────────────────────────
 
     #[test]
-    fn volume_changed_updates_both_config_and_playback_volume() {
+    fn volume_changed_updates_config_volume() {
         let mut state = AppState::default();
 
         apply(&mut state, AppEvent::Playback(PlaybackEvent::VolumeChanged { volume: 0.42 }));
 
         assert!((state.config.volume - 0.42).abs() < f32::EPSILON);
-        assert!((state.playback.volume - 0.42).abs() < f32::EPSILON,
-                "playback.volume must also be updated");
     }
 
     // ── PlaybackEvent::Shuffle ────────────────────────────────────────────────
