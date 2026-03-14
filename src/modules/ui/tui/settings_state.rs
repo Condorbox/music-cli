@@ -1,7 +1,7 @@
 use crate::application::state::AppState;
 use crate::core::events::UiEvent;
 use crate::core::models::RepeatMode;
-use crate::modules::ui::input::InputAction;
+use crate::modules::input::InputAction;
 use crate::utils::{amplitude_to_volume, VOLUME_MAX, VOLUME_STEP};
 
 const SETTINGS_FIELDS: &[SettingsField] = &[
@@ -267,7 +267,7 @@ impl SettingsState {
 mod tests {
     use super::*;
     use crate::core::events::UiEvent;
-    use crate::modules::ui::input::InputAction;
+    use crate::modules::input::InputAction;
 
     fn open_and_select_repeat(s: &mut SettingsState) {
         s.open();

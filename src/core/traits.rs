@@ -3,6 +3,7 @@ use crate::application::state::{AppState, UiState};
 use crate::core::events::UiEvent;
 use crate::core::models::Song;
 use anyhow::Result;
+use crate::modules::input::KeyConfig;
 
 /// Abstraction for audio playback backend
 pub trait PlaybackBackend: Send {
@@ -65,7 +66,7 @@ pub trait UiRenderer: Send {
 
     /// Poll for user input (non-blocking)
     /// Returns events generated from user input
-    fn poll_input(&mut self) -> Result<Vec<UiEvent>>;
+    fn poll_input(&mut self, config: &KeyConfig) -> Result<Vec<UiEvent>>;
 
     /// Update renderer with current app state before rendering
     /// Default implementation does nothing

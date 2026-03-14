@@ -1,7 +1,7 @@
 use crate::application::state::UiState;
 use crate::core::events::UiEvent;
 use crate::core::traits::UiRenderer;
-use crate::modules::ui::input::{map_key, InputAction, InputMode};
+use crate::modules::input::{map_key, InputAction, InputMode, KeyConfig};
 use crate::modules::ui::progress_formatter::format_duration;
 use anyhow::Result;
 use crossterm::{
@@ -422,7 +422,7 @@ impl UiRenderer for TuiRenderer {
         Ok(())
     }
 
-    fn poll_input(&mut self) -> Result<Vec<UiEvent>> {
+    fn poll_input(&mut self, config: &KeyConfig) -> Result<Vec<UiEvent>> {
         let mut events = Vec::new();
 
         if !event::poll(Duration::from_millis(0))? {
@@ -435,7 +435,7 @@ impl UiRenderer for TuiRenderer {
 
         let mode = self.current_mode();
 
-        if let Some(action) = map_key(mode, key) {
+        if let Some(action) = map_key(mode, key, config) {
             self.apply_action(action, &mut events);
         }
 

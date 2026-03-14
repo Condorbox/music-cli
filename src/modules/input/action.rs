@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InputAction {
     // Normal mode
     Quit,
@@ -31,4 +31,3 @@ pub enum InputAction {
     SettingsBackspace,
     SettingsClearLine,
 }
-

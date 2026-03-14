@@ -4,7 +4,7 @@ use crate::core::models::Song;
 use crate::core::traits::UiRenderer;
 use crate::modules::playback::playback_progress::PlaybackProgress;
 use crate::modules::ui::progress_formatter::format_duration;
-use crate::modules::ui::input::{map_key, InputAction, InputMode};
+use crate::modules::input::{map_key, InputAction, InputMode, KeyConfig};
 use crate::utils::PROGRESS_BAR_WIDTH;
 use anyhow::Result;
 use crossterm::cursor::MoveTo;
@@ -172,12 +172,12 @@ impl UiRenderer for TerminalRenderer {
         Ok(())
     }
 
-    fn poll_input(&mut self) -> Result<Vec<UiEvent>> {
+    fn poll_input(&mut self, config: &KeyConfig) -> Result<Vec<UiEvent>> {
         let mut events = Vec::new();
 
         if event::poll(Duration::from_millis(0))? {
             if let Event::Key(key) = event::read()? {
-                if let Some(action) = map_key(InputMode::Normal, key) {
+                if let Some(action) = map_key(InputMode::Normal, key, config) {
                     self.apply_action(action, &mut events);
                 }
             }

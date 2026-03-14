@@ -122,6 +122,60 @@ music-cli sort artist
 - **Repeat**: `Enter`/`→` cycles forward, `←` cycles backward
 - **Music path**: `Enter` to edit, type a path, `Enter` to confirm (validated), `Esc` cancel, `Ctrl+u` clear
 
+## Keymap configuration (`keymap.toml`)
+
+You can override the default TUI key bindings by creating:
+
+- `<config dir>/music-cli/keymap.toml`
+
+If the file is missing, `music-cli` uses the compiled-in defaults (silently). If the file
+exists but is invalid TOML, `music-cli` prints a warning to stderr and falls back to
+defaults.
+
+### Format
+
+- Sections: `[normal]`, `[search]`, `[settings]`
+- Value types: a string (single key) or an array of strings (multiple keys)
+- Key strings look like: `q`, `Esc`, `Enter`, `Space`, `Ctrl+c`, `Ctrl+Space`, `F5`, `Up`
+
+Example:
+
+```toml
+[normal]
+quit         = ["q", "Esc", "Ctrl+c"]
+open_settings = "s"
+enter_search  = ["/", "Ctrl+f"]
+
+[search]
+search_exit  = "Esc"
+clear_line   = "Ctrl+u"
+toggle_pause = "Ctrl+Space"
+
+[settings]
+settings_close   = ["s", "Esc"]
+settings_confirm = "Enter"
+navigate_up      = ["Up", "k"]
+navigate_down    = ["Down", "j"]
+clear_line       = "Ctrl+u"
+```
+
+### Supported actions
+
+`keymap.toml` can remap these action keys:
+
+- `[normal]`: `quit`, `open_settings`, `enter_search`, `navigate_up`, `navigate_down`,
+  `play_selected`, `toggle_pause`, `next_track`, `prev_track`, `toggle_shuffle`, `refresh`,
+  `cycle_sort`
+- `[search]`: `search_exit`, `toggle_pause`, `clear_line`, `navigate_up`, `navigate_down`,
+  `play_selected`
+- `[settings]`: `settings_close`, `settings_confirm`, `settings_left`, `settings_right`,
+  `clear_line`, `navigate_up`, `navigate_down`
+
+Text entry is intentionally not configurable:
+
+- Search text input always types characters (and `Backspace` always deletes).
+- When editing the settings path, character input always types (and `Backspace` always deletes).
+
 ## Data storage
 
 `music-cli` stores its state (library + settings like volume/shuffle/repeat/path) in:

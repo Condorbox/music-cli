@@ -10,6 +10,7 @@ use crate::application::handlers::library_handler::LibraryHandler;
 use crate::application::handlers::playback_handler::PlaybackHandler;
 use crate::application::handlers::ui_handler::UiHandler;
 use crate::modules::playback::shuffle_manager::ShuffleManager;
+use crate::modules::input::KeyConfig;
 use crate::utils::{EVENT_CHANNEL_CAPACITY, TICK_RATE_MS};
 
 /// Main application orchestrator
@@ -24,6 +25,9 @@ pub struct Application {
     playback_backend: Option<Box<dyn PlaybackBackend>>,
     storage_backend: Option<Box<dyn StorageBackend>>,
     ui_renderer: Option<Box<dyn UiRenderer>>,
+
+    config_dir: Option<std::path::PathBuf>,
+    key_config: KeyConfig,
 
     // Keep track of running state
     running: bool,
@@ -46,6 +50,8 @@ impl Application {
             playback_backend: None,
             storage_backend: None,
             ui_renderer: None,
+            config_dir: None,
+            key_config: KeyConfig::default(),
             running: false,
             playback_handler: PlaybackHandler,
             library_handler: LibraryHandler::new(),
@@ -83,6 +89,17 @@ impl Application {
 
     /// Initialize the application
     pub fn init(&mut self) -> Result<()> {
+        // Resolve config directory early so modules can load configuration.
+        if self.config_dir.is_none() {
+            self.config_dir = dirs::config_dir();
+        }
+
+        if let Some(config_dir) = &self.config_dir {
+            self.key_config = KeyConfig::load_or_default(config_dir);
+        } else {
+            self.key_config = KeyConfig::default();
+        }
+
         // Load state from storage
         if let Some(storage) = &self.storage_backend {
             match storage.load() {
@@ -173,7 +190,7 @@ impl Application {
 
     fn poll_ui_input(&mut self) -> Result<()> {
         if let Some(ui) = &mut self.ui_renderer {
-            for event in ui.poll_input()? {
+            for event in ui.poll_input(&self.key_config)? {
                 self.event_tx.send(AppEvent::Ui(event))?;
             }
         }
