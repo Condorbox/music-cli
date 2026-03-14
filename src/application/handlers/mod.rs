@@ -60,9 +60,6 @@ impl<'a> HandlerContext<'a> {
         loop_playlist: bool,
     ) -> Result<()> {
         let target = if self.shuffle_manager.is_enabled() {
-            if self.shuffle_manager.remaining_in_pass() == 0 {
-                self.shuffle_manager.initialize(library_len, current_index);
-            }
             match self.shuffle_manager.next_index(current_index, loop_playlist) {
                 Some(idx) => NavTarget::Go(idx),
                 None => NavTarget::Restart,
