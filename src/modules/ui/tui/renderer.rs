@@ -171,7 +171,7 @@ impl TuiRenderer {
                 .iter()
                 .map(|(original_idx, song)| {
                     let is_current = current_path.is_some_and(|p| p == &song.path);
-                    song_list_item(original_idx + 1, song, is_current, content_width)
+                    song_list_item(None, song, is_current, content_width)
                 })
                 .collect();
 
@@ -190,14 +190,14 @@ impl TuiRenderer {
                 .enumerate()
                 .map(|(i, song)| {
                     let is_current = current_path.is_some_and(|p| p == &song.path);
-                    song_list_item(i + 1, song, is_current, content_width)
+                    song_list_item(Some(i + 1), song, is_current, content_width)
                 })
                 .collect();
 
             (items, self.songs.len(), String::new())
         };
 
-        let sort_label = active_sort_label(self.active_sort);
+        let sort_label = if self.search_active { "" } else { active_sort_label(self.active_sort) };
         let list_title = format!(" Library ({} songs{}) {} ", total_count, match_info, sort_label);
 
         let list = List::new(items)
@@ -1000,7 +1000,7 @@ fn truncate_str(s: &str, max_chars: usize) -> String {
 }
 
 
-fn song_list_item(num: usize, song: &crate::core::models::Song, is_current: bool, available_width: u16) -> ListItem<'static> {
+fn song_list_item(num: Option<usize>, song: &crate::core::models::Song, is_current: bool, available_width: u16) -> ListItem<'static> {
     const SEP: &str = "  ·  ";       // 5 chars
     const INDEX_WIDTH: usize = 6;    // "  1.  "
     const DURATION_WIDTH: usize = 10; // "  [59:59]" worst case
@@ -1060,7 +1060,10 @@ fn song_list_item(num: usize, song: &crate::core::models::Song, is_current: bool
     // ── Assemble ─────────────────────────────────────────────────────────
     let mut spans: Vec<Span> = Vec::with_capacity(9);
 
-    spans.push(Span::styled(format!("{:3}.  ", num), structural));
+    match num {
+        Some(n) => spans.push(Span::styled(format!("{:3}.  ", n), structural)),
+        None    => spans.push(Span::raw("      ")),   // 6 spaces
+    }
     spans.push(Span::styled(title, title_style));
 
     if let Some(a) = artist {
