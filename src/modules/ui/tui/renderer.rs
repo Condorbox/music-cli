@@ -2,9 +2,10 @@ use crate::application::state::UiState;
 use crate::core::events::UiEvent;
 use crate::core::traits::UiRenderer;
 use crate::modules::ui::progress_formatter::format_duration;
+use crate::modules::ui::tui::input_handler::{InputAction, InputContext, InputHandler, InputMode};
 use anyhow::Result;
 use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers},
+    event::{self, Event},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -42,6 +43,7 @@ pub struct TuiRenderer {
     search_results: Vec<(usize, crate::core::models::Song)>,
     shuffle: bool,
 
+    input: InputHandler,
     settings: SettingsState,
 
     active_sort: Option<SortField>,
@@ -60,6 +62,7 @@ impl TuiRenderer {
             search_results: Vec::new(),
             shuffle: false,
             current_elapsed: Duration::from_secs(0),
+            input: InputHandler::default(),
             settings: SettingsState::default(),
             active_sort: None,
         }
@@ -434,10 +437,20 @@ impl UiRenderer for TuiRenderer {
 
         if self.settings.is_open() {
             events.extend(self.settings.handle_key(key));
-        } else if self.search_active {
-            self.handle_search_input(key, &mut events);
         } else {
-            self.handle_normal_input(key, &mut events);
+            let mode = if self.search_active {
+                InputMode::Search
+            } else {
+                InputMode::Normal
+            };
+
+            let ctx = InputContext {
+                has_songs: !self.songs.is_empty(),
+            };
+
+            if let Some(action) = self.input.handle_key(mode, ctx, key) {
+                self.apply_input_action(action, &mut events);
+            }
         }
 
         Ok(events)
@@ -477,97 +490,49 @@ impl UiRenderer for TuiRenderer {
 }
 
 impl TuiRenderer {
-    fn handle_search_input(&mut self, key: event::KeyEvent, events: &mut Vec<UiEvent>) {
-        match key.code {
-            KeyCode::Esc => {
-                events.push(UiEvent::SearchToggled { active: false });
+    fn apply_input_action(&mut self, action: InputAction, events: &mut Vec<UiEvent>) {
+        match action {
+            InputAction::Quit => events.push(UiEvent::QuitRequested),
+            InputAction::OpenSettings => self.settings.open(),
+
+            InputAction::SearchEnter => events.push(UiEvent::SearchToggled { active: true }),
+            InputAction::SearchExit => events.push(UiEvent::SearchToggled { active: false }),
+            InputAction::SearchClearAll => {
+                events.push(UiEvent::SearchQueryChanged {
+                    query: String::new(),
+                });
             }
-            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                events.push(UiEvent::SearchQueryChanged { query: String::new() });
-            }
-            KeyCode::Backspace => {
+            InputAction::SearchBackspace => {
                 let mut q = self.search_query.clone();
                 q.pop();
                 events.push(UiEvent::SearchQueryChanged { query: q });
             }
-            KeyCode::Up => {
-                if let Some(index) = self.navigate_up() {
-                    events.push(UiEvent::SelectionChanged { index });
-                }
-            }
-            KeyCode::Down => {
-                if let Some(index) = self.navigate_down() {
-                    events.push(UiEvent::SelectionChanged { index });
-                }
-            }
-            KeyCode::Enter => {
-                events.push(UiEvent::PlaySelectedRequested);
-            }
-            KeyCode::Char(' ') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                events.push(UiEvent::TogglePauseRequested);
-            }
-            KeyCode::Char(c) => {
+            InputAction::SearchAppend(c) => {
                 let mut q = self.search_query.clone();
                 q.push(c);
                 events.push(UiEvent::SearchQueryChanged { query: q });
             }
-            _ => {}
-        }
-    }
 
-    fn handle_normal_input(&mut self, key: event::KeyEvent, events: &mut Vec<UiEvent>) {
-        match key.code {
-            KeyCode::Char('q') | KeyCode::Esc => {
-                events.push(UiEvent::QuitRequested);
-            }
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                events.push(UiEvent::QuitRequested);
-            }
-            KeyCode::Char('s') => {
-                self.settings.open();
-            }
-            KeyCode::Char('/') => {
-                if !self.songs.is_empty() {
-                    events.push(UiEvent::SearchToggled { active: true });
-                }
-            }
-            KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                if !self.songs.is_empty() {
-                    events.push(UiEvent::SearchToggled { active: true });
-                }
-            }
-            KeyCode::Up | KeyCode::Char('k') => {
+            InputAction::NavigateUp => {
                 if let Some(index) = self.navigate_up() {
                     events.push(UiEvent::SelectionChanged { index });
                 }
             }
-            KeyCode::Down | KeyCode::Char('j') => {
+            InputAction::NavigateDown => {
                 if let Some(index) = self.navigate_down() {
                     events.push(UiEvent::SelectionChanged { index });
                 }
             }
-            KeyCode::Enter => {
-                events.push(UiEvent::PlaySelectedRequested);
-            }
-            KeyCode::Char(' ') | KeyCode::Char('p') => {
-                events.push(UiEvent::TogglePauseRequested);
-            }
-            KeyCode::Char('n') | KeyCode::Right => {
-                events.push(UiEvent::NextTrackRequested);
-            }
-            KeyCode::Char('b') | KeyCode::Left => {
-                events.push(UiEvent::PreviousTrackRequested);
-            }
-            KeyCode::Char('r') => {
-                events.push(UiEvent::ShuffleToggled { shuffle_enabled: self.shuffle });
-            }
-            KeyCode::F(5) | KeyCode::Char('u')=> {
-                events.push(UiEvent::RefreshRequested);
-            }
-            KeyCode::Char('o') => {
-                events.push(UiEvent::SortCycleRequested);
-            }
-            _ => {}
+
+            InputAction::PlaySelected => events.push(UiEvent::PlaySelectedRequested),
+            InputAction::TogglePause => events.push(UiEvent::TogglePauseRequested),
+            InputAction::NextTrack => events.push(UiEvent::NextTrackRequested),
+            InputAction::PreviousTrack => events.push(UiEvent::PreviousTrackRequested),
+            InputAction::ShuffleToggle => events.push(UiEvent::ShuffleToggled {
+                shuffle_enabled: self.shuffle,
+            }),
+            InputAction::Refresh => events.push(UiEvent::RefreshRequested),
+            InputAction::SortCycle => events.push(UiEvent::SortCycleRequested),
         }
     }
 }
