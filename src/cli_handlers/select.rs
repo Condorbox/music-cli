@@ -1,8 +1,6 @@
+use crate::cli_handlers::context::CliContext;
 use crate::cli_handlers::CliCommand;
-use crate::core::traits::{PlaybackBackend, StorageBackend};
-use crate::modules::playback::rodio_backend::RodioBackend;
-use crate::modules::storage::json_backend::JsonStorageBackend;
-use crate::modules::ui::terminal::renderer::TerminalRenderer;
+use crate::core::traits::PlaybackBackend;
 use crate::utils::APP_NAME;
 use anyhow::Result;
 
@@ -12,38 +10,32 @@ pub struct SelectCommand {
 
 impl CliCommand for SelectCommand {
     fn execute(self: Box<Self>) -> Result<()> {
-        let storage = JsonStorageBackend::new()?;
-        let state = storage.load()?;
-        let ui = TerminalRenderer::new();
+        let mut ctx = CliContext::load()?;
 
-        if state.library.songs.is_empty() {
-            ui.print_error(&format!("Library is empty. Run '{} refresh' first.", APP_NAME));
+        if ctx.state.library.songs.is_empty() {
+            ctx.ui.print_error(&format!("Library is empty. Run '{} refresh' first.", APP_NAME));
             return Ok(());
         }
 
-        let song = state.library.songs.get(self.index)
+        let song = ctx.state.library.songs.get(self.index)
             .ok_or_else(|| anyhow::anyhow!(
                 "Invalid index {}. Library has {} songs (0-{}).",
                 self.index,
-                state.library.songs.len(),
-                state.library.songs.len() - 1
+                ctx.state.library.songs.len(),
+                ctx.state.library.songs.len() - 1
             ))?;
 
-        ui.print_message(&format!("Playing: {}", song.title));
+        ctx.ui.print_message(&format!("Playing: {}", song.title));
 
-        let storage = JsonStorageBackend::new()?;
-        let state = storage.load()?;
+        ctx.backend.set_volume(ctx.state.config.volume);
+        ctx.backend.play(song)?;
 
-        let mut backend = RodioBackend::new()?;
-        backend.set_volume(state.config.volume);
-        backend.play(song)?;
-
-        ui.print_message("Press Ctrl+C to stop");
-        while backend.is_playing() {
+        ctx.ui.print_message("Press Ctrl+C to stop");
+        while ctx.backend.is_playing() {
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
 
-        ui.print_message("✓ Playback finished");
+        ctx.ui.print_message("✓ Playback finished");
 
         Ok(())
     }

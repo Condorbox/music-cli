@@ -9,6 +9,7 @@ mod select;
 mod settings;
 mod sort;
 mod status;
+mod context;
 
 pub use browse::BrowseCommand;
 pub use list::ListCommand;

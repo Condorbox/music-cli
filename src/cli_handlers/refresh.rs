@@ -1,36 +1,33 @@
-use std::sync::Arc;
+use crate::cli_handlers::context::CliContext;
 use crate::cli_handlers::CliCommand;
-use crate::modules::library::scanner;
-use crate::modules::storage::json_backend::JsonStorageBackend;
-use crate::modules::ui::terminal::renderer::TerminalRenderer;
 use crate::core::traits::StorageBackend;
+use crate::modules::library::scanner;
 use crate::utils::APP_NAME;
 use anyhow::Result;
+use std::sync::Arc;
 
 pub struct RefreshCommand;
 
 impl CliCommand for RefreshCommand {
     fn execute(self: Box<Self>) -> Result<()> {
-        let storage = JsonStorageBackend::new()?;
-        let mut state = storage.load()?;
-        let ui = TerminalRenderer::new();
+        let mut ctx = CliContext::load()?;
 
-        let root_path = state.config.root_path
+        let root_path = ctx.state.config.root_path
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!(
                 "No music path set. Run '{} path <DIR>' first.", APP_NAME
             ))?
             .clone();
 
-        ui.print_message(&format!("Scanning {:?}...", root_path));
+        ctx.ui.print_message(&format!("Scanning {:?}...", root_path));
 
         let songs = scanner::scan_directory(&root_path)?;
         let count = songs.len();
 
-        state.library.songs = Arc::new(songs);
-        storage.save(&state)?;
+        ctx.state.library.songs = Arc::new(songs);
+        ctx.storage.save(&ctx.state)?;
 
-        ui.print_message(&format!("✓ Refresh complete. Found {} songs.", count));
+        ctx.ui.print_message(&format!("✓ Refresh complete. Found {} songs.", count));
 
         Ok(())
     }

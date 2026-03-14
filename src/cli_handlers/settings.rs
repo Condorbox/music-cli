@@ -1,13 +1,10 @@
-use crate::application::app::Application;
+use crate::cli_handlers::context::CliContext;
 use crate::cli_handlers::CliCommand;
 use crate::core::events::{AppEvent, PlaybackEvent, UiEvent};
 use crate::core::models::RepeatMode;
-use crate::modules::playback::rodio_backend::RodioBackend;
-use crate::modules::storage::json_backend::JsonStorageBackend;
 use crate::modules::ui::terminal::renderer::TerminalRenderer;
 use crate::utils::{amplitude_to_volume, volume_percent_to_amplitude};
 use anyhow::Result;
-use crate::core::traits::StorageBackend;
 
 // ── Volume ────────────────────────────────────────────────────────────────────
 pub struct VolumeCommand {
@@ -16,18 +13,13 @@ pub struct VolumeCommand {
 
 impl CliCommand for VolumeCommand {
     fn execute(self: Box<Self>) -> Result<()> {
-        let storage = JsonStorageBackend::new()?;
-        let state = storage.load()?;
-        let ui = TerminalRenderer::new();
+        let ctx = CliContext::load()?;
 
         match self.volume {
             Some(vol) => {
                 let volume_f32 = volume_percent_to_amplitude(vol);
 
-                let mut app = Application::new()
-                    .with_playback_backend(Box::new(RodioBackend::new()?))
-                    .with_storage_backend(Box::new(storage))
-                    .with_ui_renderer(Box::new(ui));
+                let mut app = CliContext::new_app(ctx)?;
 
                 app.init()?;
                 app.event_sender()
@@ -39,8 +31,8 @@ impl CliCommand for VolumeCommand {
                 ui.print_message(&format!("Volume set to: {}%", vol));
             }
             None => {
-                let current_percent = amplitude_to_volume(state.config.volume);
-                ui.print_message(&format!("Current volume: {}%", current_percent));
+                let current_percent = amplitude_to_volume(ctx.state.config.volume);
+                ctx.ui.print_message(&format!("Current volume: {}%", current_percent));
             }
         }
 
@@ -55,26 +47,18 @@ pub struct ShuffleCommand {
 
 impl CliCommand for ShuffleCommand {
     fn execute(self :Box<Self>) -> Result<()> {
-        let storage = JsonStorageBackend::new()?;
-        let state = storage.load()?;
-        let ui = TerminalRenderer::new();
+        let ctx = CliContext::load()?;
 
-        let new_state = self.enabled.unwrap_or(!state.config.shuffle);
+        let new_state = self.enabled.unwrap_or(!ctx.state.config.shuffle);
+        ctx.ui.print_message(&format!("Shuffle set to: {}", new_state));
 
-        let mut app = Application::new()
-            .with_playback_backend(Box::new(RodioBackend::new()?))
-            .with_storage_backend(Box::new(storage))
-            .with_ui_renderer(Box::new(ui));
+        let mut app = CliContext::new_app(ctx)?;
 
         app.init()?;
         app.event_sender()
             .send(AppEvent::Ui(UiEvent::ShuffleSet { enabled: new_state }))?;
         app.run_once()?;
         app.cleanup()?;
-
-        let ui = TerminalRenderer::new();
-        ui.print_message(&format!("Shuffle set to: {}", new_state));
-
         Ok(())
     }
 }
@@ -86,29 +70,22 @@ pub struct LoopCommand {
 
 impl CliCommand for LoopCommand {
     fn execute(self: Box<Self>) -> Result<()> {
-        let storage = JsonStorageBackend::new()?;
-        let state = storage.load()?;
-        let ui = TerminalRenderer::new();
+        let ctx = CliContext::load()?;
 
-        let new_mode = self.mode.unwrap_or_else(|| state.config.repeat.cycle());
+        let new_mode = self.mode.unwrap_or_else(|| ctx.state.config.repeat.cycle());
+        ctx.ui.print_message(&format!(
+            "Repeat mode set to: {} {}",
+            new_mode.symbol(),
+            repeat_mode_description(new_mode),
+        ));
 
-        let mut app = Application::new()
-            .with_playback_backend(Box::new(RodioBackend::new()?))
-            .with_storage_backend(Box::new(storage))
-            .with_ui_renderer(Box::new(ui));
+        let mut app = CliContext::new_app(ctx)?;
 
         app.init()?;
         app.event_sender()
             .send(AppEvent::Playback(PlaybackEvent::RepeatChanged { mode: new_mode }))?;
         app.run_once()?;
         app.cleanup()?;
-
-        let ui = TerminalRenderer::new();
-        ui.print_message(&format!(
-            "Repeat mode set to: {} {}",
-            new_mode.symbol(),
-            repeat_mode_description(new_mode),
-        ));
 
         Ok(())
     }
