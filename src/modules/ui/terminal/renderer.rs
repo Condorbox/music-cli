@@ -4,10 +4,11 @@ use crate::core::models::Song;
 use crate::core::traits::UiRenderer;
 use crate::modules::playback::playback_progress::PlaybackProgress;
 use crate::modules::ui::progress_formatter::format_duration;
+use crate::modules::ui::input::{map_key, InputAction, InputMode};
 use crate::utils::PROGRESS_BAR_WIDTH;
 use anyhow::Result;
 use crossterm::cursor::MoveTo;
-use crossterm::{event::{self, Event, KeyCode, KeyEvent}, queue, terminal::{self, Clear, ClearType}};
+use crossterm::{event::{self, Event}, queue, terminal::{self, Clear, ClearType}};
 use std::io::{stdout, Write};
 use std::time::Duration;
 
@@ -175,30 +176,9 @@ impl UiRenderer for TerminalRenderer {
         let mut events = Vec::new();
 
         if event::poll(Duration::from_millis(0))? {
-            if let Event::Key(KeyEvent { code, .. }) = event::read()? {
-                match code {
-                    KeyCode::Char(' ') | KeyCode::Char('p') | KeyCode::Char('P') |
-                    KeyCode::Char('k') | KeyCode::Char('K') => {
-                        events.push(UiEvent::TogglePauseRequested);
-                    }
-                    KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Right => {
-                        events.push(UiEvent::NextTrackRequested);
-                    }
-                    KeyCode::Char('b') | KeyCode::Char('B') | KeyCode::Left => {
-                        events.push(UiEvent::PreviousTrackRequested);
-                    }
-                    KeyCode::Char('r') | KeyCode::Char('R') => {
-                        events.push(UiEvent::ShuffleToggled {
-                            shuffle_enabled: self.shuffle_enabled,
-                        });
-                    }
-                    KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
-                        events.push(UiEvent::QuitRequested);
-                    }
-                    KeyCode::Enter => {
-                        events.push(UiEvent::PlaySelectedRequested);
-                    }
-                    _ => {}
+            if let Event::Key(key) = event::read()? {
+                if let Some(action) = map_key(InputMode::Normal, key) {
+                    self.apply_action(action, &mut events);
                 }
             }
         }
@@ -211,5 +191,22 @@ impl UiRenderer for TerminalRenderer {
         self.current_song = state.playback.current_song.clone();
         self.current_elapsed = state.playback.current_elapsed;
         self.is_paused = state.playback.is_paused;
+    }
+}
+
+impl TerminalRenderer {
+    fn apply_action(&self, action: InputAction, events: &mut Vec<UiEvent>) {
+        match action {
+            InputAction::TogglePause => events.push(UiEvent::TogglePauseRequested),
+            InputAction::NextTrack => events.push(UiEvent::NextTrackRequested),
+            InputAction::PreviousTrack => events.push(UiEvent::PreviousTrackRequested),
+            InputAction::ToggleShuffle => events.push(UiEvent::ShuffleToggled {
+                shuffle_enabled: self.shuffle_enabled,
+            }),
+            InputAction::Quit => events.push(UiEvent::QuitRequested),
+            InputAction::PlaySelected => events.push(UiEvent::PlaySelectedRequested),
+            InputAction::Refresh => events.push(UiEvent::RefreshRequested),
+            _ => {}
+        }
     }
 }

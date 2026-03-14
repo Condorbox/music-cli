@@ -1,8 +1,8 @@
 use crate::application::state::AppState;
 use crate::core::events::UiEvent;
 use crate::core::models::RepeatMode;
+use crate::modules::ui::input::InputAction;
 use crate::utils::{amplitude_to_volume, VOLUME_MAX, VOLUME_STEP};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 const SETTINGS_FIELDS: &[SettingsField] = &[
     SettingsField::Volume,
@@ -118,20 +118,20 @@ impl SettingsState {
         }
     }
 
-    pub fn handle_key(&mut self, key: KeyEvent) -> Vec<UiEvent> {
+    pub fn apply_action(&mut self, action: InputAction) -> Vec<UiEvent> {
         let mut events = Vec::new();
 
         if self.editing_path {
-            self.handle_path_editing_input(key, &mut events);
+            self.apply_path_action(action, &mut events);
             return events;
         }
 
         if self.editing_volume {
-            self.handle_volume_editing_input(key, &mut events);
+            self.apply_volume_action(action, &mut events);
             return events;
         }
 
-        self.handle_navigation_input(key, &mut events);
+        self.apply_navigation_action(action, &mut events);
         events
     }
 
@@ -153,27 +153,24 @@ impl SettingsState {
         self.selected = SETTINGS_FIELDS[next];
     }
 
-    fn handle_volume_editing_input(&mut self, key: KeyEvent, events: &mut Vec<UiEvent>) {
-        match key.code {
-            KeyCode::Enter => {
+    fn apply_volume_action(&mut self, action: InputAction, events: &mut Vec<UiEvent>) {
+        match action {
+            InputAction::SettingsConfirm => {
                 self.editing_volume = false;
                 events.push(UiEvent::VolumeChangeRequested {
                     volume: self.temp_volume,
                 });
             }
-            KeyCode::Esc => {
+            InputAction::SettingsClose => {
                 self.editing_volume = false;
             }
-            KeyCode::Left => {
+            InputAction::SettingsLeft => {
                 self.temp_volume = self.temp_volume.saturating_sub(VOLUME_STEP);
             }
-            KeyCode::Right => {
-                self.temp_volume = self
-                    .temp_volume
-                    .saturating_add(VOLUME_STEP)
-                    .min(VOLUME_MAX);
+            InputAction::SettingsRight => {
+                self.temp_volume = self.temp_volume.saturating_add(VOLUME_STEP).min(VOLUME_MAX);
             }
-            KeyCode::Char(c) if c.is_ascii_digit() => {
+            InputAction::SettingsTypeChar(c) if c.is_ascii_digit() => {
                 let digit = c.to_digit(10).unwrap() as u8;
                 let new_val = (self.temp_volume % 10) * 10 + digit;
                 if new_val <= VOLUME_MAX {
@@ -184,9 +181,9 @@ impl SettingsState {
         }
     }
 
-    fn handle_path_editing_input(&mut self, key: KeyEvent, events: &mut Vec<UiEvent>) {
-        match key.code {
-            KeyCode::Enter => {
+    fn apply_path_action(&mut self, action: InputAction, events: &mut Vec<UiEvent>) {
+        match action {
+            InputAction::SettingsConfirm => {
                 let path = std::path::Path::new(&self.temp_path);
                 if self.temp_path.is_empty() {
                     self.path_validation =
@@ -205,19 +202,19 @@ impl SettingsState {
                     });
                 }
             }
-            KeyCode::Esc => {
+            InputAction::SettingsClose => {
                 self.editing_path = false;
                 self.path_validation = PathValidation::Idle;
             }
-            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            InputAction::SettingsClearLine => {
                 self.temp_path.clear();
                 self.path_validation = PathValidation::Idle;
             }
-            KeyCode::Backspace => {
+            InputAction::SettingsBackspace => {
                 self.temp_path.pop();
                 self.path_validation = PathValidation::Idle;
             }
-            KeyCode::Char(c) => {
+            InputAction::SettingsTypeChar(c) => {
                 self.temp_path.push(c);
                 self.path_validation = PathValidation::Idle;
             }
@@ -225,18 +222,16 @@ impl SettingsState {
         }
     }
 
-    fn handle_navigation_input(&mut self, key: KeyEvent, events: &mut Vec<UiEvent>) {
-        match key.code {
-            KeyCode::Char('s') | KeyCode::Esc => {
-                self.close();
-            }
-            KeyCode::Up | KeyCode::Char('k') => {
+    fn apply_navigation_action(&mut self, action: InputAction, events: &mut Vec<UiEvent>) {
+        match action {
+            InputAction::SettingsClose => self.close(),
+            InputAction::SettingsNavigateUp => {
                 self.navigate_up();
             }
-            KeyCode::Down | KeyCode::Char('j') => {
+            InputAction::SettingsNavigateDown => {
                 self.navigate_down();
             }
-            KeyCode::Enter => match self.selected {
+            InputAction::SettingsConfirm => match self.selected {
                 SettingsField::Volume => {
                     self.editing_volume = true;
                 }
@@ -251,21 +246,17 @@ impl SettingsState {
                     self.path_validation = PathValidation::Idle;
                 }
             },
-            KeyCode::Left => {
-                if self.selected == SettingsField::Repeat {
-                    self.temp_repeat = self.temp_repeat.cycle_back();
-                    events.push(UiEvent::RepeatChangeRequested {
-                        mode: self.temp_repeat,
-                    });
-                }
+            InputAction::SettingsLeft if self.selected == SettingsField::Repeat => {
+                self.temp_repeat = self.temp_repeat.cycle_back();
+                events.push(UiEvent::RepeatChangeRequested {
+                    mode: self.temp_repeat,
+                });
             }
-            KeyCode::Right => {
-                if self.selected == SettingsField::Repeat {
-                    self.temp_repeat = self.temp_repeat.cycle();
-                    events.push(UiEvent::RepeatChangeRequested {
-                        mode: self.temp_repeat,
-                    });
-                }
+            InputAction::SettingsRight if self.selected == SettingsField::Repeat => {
+                self.temp_repeat = self.temp_repeat.cycle();
+                events.push(UiEvent::RepeatChangeRequested {
+                    mode: self.temp_repeat,
+                });
             }
             _ => {}
         }
@@ -276,10 +267,19 @@ impl SettingsState {
 mod tests {
     use super::*;
     use crate::core::events::UiEvent;
-    use crossterm::event::KeyModifiers;
+    use crate::modules::ui::input::InputAction;
 
-    fn key(code: KeyCode) -> KeyEvent {
-        KeyEvent::new(code, KeyModifiers::NONE)
+    fn open_and_select_repeat(s: &mut SettingsState) {
+        s.open();
+        s.apply_action(InputAction::SettingsNavigateDown);
+        assert_eq!(s.selected(), SettingsField::Repeat);
+    }
+
+    fn open_and_select_path(s: &mut SettingsState) {
+        s.open();
+        s.apply_action(InputAction::SettingsNavigateDown);
+        s.apply_action(InputAction::SettingsNavigateDown);
+        assert_eq!(s.selected(), SettingsField::MusicPath);
     }
 
     #[test]
@@ -287,12 +287,12 @@ mod tests {
         let mut s = SettingsState::default();
         s.open();
 
-        let events = s.handle_key(key(KeyCode::Enter));
+        let events = s.apply_action(InputAction::SettingsConfirm);
         assert!(events.is_empty());
         assert!(s.is_editing_volume());
 
-        s.handle_key(key(KeyCode::Right));
-        let events = s.handle_key(key(KeyCode::Enter));
+        s.apply_action(InputAction::SettingsRight);
+        let events = s.apply_action(InputAction::SettingsConfirm);
 
         assert!(!s.is_editing_volume());
         assert_eq!(events.len(), 1);
@@ -300,18 +300,51 @@ mod tests {
     }
 
     #[test]
-    fn path_edit_empty_sets_error() {
+    fn volume_edit_close_cancels_without_emitting_and_keeps_modal_open() {
         let mut s = SettingsState::default();
         s.open();
 
-        s.handle_key(key(KeyCode::Down));
-        s.handle_key(key(KeyCode::Down));
-        assert_eq!(s.selected(), SettingsField::MusicPath);
+        let events = s.apply_action(InputAction::SettingsConfirm);
+        assert!(events.is_empty());
+        assert!(s.is_editing_volume());
 
-        s.handle_key(key(KeyCode::Enter));
+        let events = s.apply_action(InputAction::SettingsClose);
+        assert!(events.is_empty());
+        assert!(s.is_open());
+        assert!(!s.is_editing_volume());
+    }
+
+    #[test]
+    fn volume_edit_digit_typing_and_saturation() {
+        // Saturation at max.
+        let mut s = SettingsState::default();
+        s.open();
+        s.apply_action(InputAction::SettingsConfirm);
+        assert_eq!(s.temp_volume(), VOLUME_MAX);
+        s.apply_action(InputAction::SettingsRight);
+        assert_eq!(s.temp_volume(), VOLUME_MAX);
+        s.apply_action(InputAction::SettingsLeft);
+        assert_eq!(s.temp_volume(), VOLUME_MAX.saturating_sub(VOLUME_STEP));
+
+        // Digit typing.
+        let mut s = SettingsState::default();
+        s.open();
+        s.apply_action(InputAction::SettingsConfirm);
+        s.apply_action(InputAction::SettingsTypeChar('5'));
+        assert_eq!(s.temp_volume(), 5);
+        s.apply_action(InputAction::SettingsTypeChar('0'));
+        assert_eq!(s.temp_volume(), 50);
+    }
+
+    #[test]
+    fn path_edit_empty_sets_error() {
+        let mut s = SettingsState::default();
+        open_and_select_path(&mut s);
+
+        s.apply_action(InputAction::SettingsConfirm);
         assert!(s.is_editing_path());
 
-        let events = s.handle_key(key(KeyCode::Enter));
+        let events = s.apply_action(InputAction::SettingsConfirm);
         assert!(events.is_empty());
         assert!(matches!(s.path_validation(), PathValidation::Error(_)));
         assert!(s.is_editing_path());
@@ -320,11 +353,8 @@ mod tests {
     #[test]
     fn path_edit_valid_dir_emits_event_and_exits_edit() {
         let mut s = SettingsState::default();
-        s.open();
-
-        s.handle_key(key(KeyCode::Down));
-        s.handle_key(key(KeyCode::Down));
-        s.handle_key(key(KeyCode::Enter));
+        open_and_select_path(&mut s);
+        s.apply_action(InputAction::SettingsConfirm);
 
         let dir = std::env::temp_dir().join(format!(
             "music_cli_settings_state_test_{}",
@@ -334,10 +364,10 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
 
         for ch in dir.to_string_lossy().chars() {
-            s.handle_key(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE));
+            s.apply_action(InputAction::SettingsTypeChar(ch));
         }
 
-        let events = s.handle_key(key(KeyCode::Enter));
+        let events = s.apply_action(InputAction::SettingsConfirm);
         assert!(!s.is_editing_path());
         assert!(matches!(s.path_validation(), PathValidation::Idle));
         assert_eq!(events.len(), 1);
@@ -349,16 +379,82 @@ mod tests {
     #[test]
     fn ctrl_u_clears_path() {
         let mut s = SettingsState::default();
-        s.open();
+        open_and_select_path(&mut s);
+        s.apply_action(InputAction::SettingsConfirm);
 
-        s.handle_key(key(KeyCode::Down));
-        s.handle_key(key(KeyCode::Down));
-        s.handle_key(key(KeyCode::Enter));
-
-        s.handle_key(key(KeyCode::Char('a')));
+        s.apply_action(InputAction::SettingsTypeChar('a'));
         assert_eq!(s.temp_path(), "a");
 
-        s.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
+        s.apply_action(InputAction::SettingsClearLine);
         assert_eq!(s.temp_path(), "");
+    }
+
+    #[test]
+    fn path_edit_backspace_and_typing_clears_stale_error() {
+        let mut s = SettingsState::default();
+        open_and_select_path(&mut s);
+        s.apply_action(InputAction::SettingsConfirm);
+
+        // Force an error first.
+        s.apply_action(InputAction::SettingsConfirm);
+        assert!(matches!(s.path_validation(), PathValidation::Error(_)));
+
+        s.apply_action(InputAction::SettingsTypeChar('a'));
+        assert!(matches!(s.path_validation(), PathValidation::Idle));
+        assert_eq!(s.temp_path(), "a");
+
+        s.apply_action(InputAction::SettingsTypeChar('b'));
+        assert_eq!(s.temp_path(), "ab");
+        s.apply_action(InputAction::SettingsBackspace);
+        assert_eq!(s.temp_path(), "a");
+    }
+
+    #[test]
+    fn navigation_wraps_in_both_directions() {
+        let mut s = SettingsState::default();
+        s.open();
+        assert_eq!(s.selected(), SettingsField::Volume);
+
+        s.apply_action(InputAction::SettingsNavigateUp);
+        assert_eq!(s.selected(), SettingsField::MusicPath);
+
+        s.apply_action(InputAction::SettingsNavigateDown);
+        assert_eq!(s.selected(), SettingsField::Volume);
+    }
+
+    #[test]
+    fn repeat_cycles_forward_and_backward() {
+        let mut s = SettingsState::default();
+        open_and_select_repeat(&mut s);
+        let start = s.temp_repeat();
+
+        let events = s.apply_action(InputAction::SettingsConfirm);
+        assert_eq!(s.temp_repeat(), start.cycle());
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], UiEvent::RepeatChangeRequested { .. }));
+
+        let events = s.apply_action(InputAction::SettingsLeft);
+        assert_eq!(s.temp_repeat(), start);
+        assert_eq!(events.len(), 1);
+
+        let events = s.apply_action(InputAction::SettingsRight);
+        assert_eq!(s.temp_repeat(), start.cycle());
+        assert_eq!(events.len(), 1);
+    }
+
+    #[test]
+    fn close_in_navigation_closes_modal_but_close_in_edit_exits_edit_only() {
+        let mut s = SettingsState::default();
+        s.open();
+        assert!(s.is_open());
+
+        s.apply_action(InputAction::SettingsConfirm);
+        assert!(s.is_editing_volume());
+        s.apply_action(InputAction::SettingsClose);
+        assert!(s.is_open());
+        assert!(!s.is_editing_volume());
+
+        s.apply_action(InputAction::SettingsClose);
+        assert!(!s.is_open());
     }
 }

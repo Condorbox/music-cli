@@ -1,8 +1,8 @@
 use crate::application::state::UiState;
 use crate::core::events::UiEvent;
 use crate::core::traits::UiRenderer;
+use crate::modules::ui::input::{map_key, InputAction, InputMode};
 use crate::modules::ui::progress_formatter::format_duration;
-use crate::modules::ui::tui::input_handler::{InputAction, InputContext, InputHandler, InputMode};
 use anyhow::Result;
 use crossterm::{
     event::{self, Event},
@@ -43,7 +43,6 @@ pub struct TuiRenderer {
     search_results: Vec<(usize, crate::core::models::Song)>,
     shuffle: bool,
 
-    input: InputHandler,
     settings: SettingsState,
 
     active_sort: Option<SortField>,
@@ -62,7 +61,6 @@ impl TuiRenderer {
             search_results: Vec::new(),
             shuffle: false,
             current_elapsed: Duration::from_secs(0),
-            input: InputHandler::default(),
             settings: SettingsState::default(),
             active_sort: None,
         }
@@ -435,22 +433,10 @@ impl UiRenderer for TuiRenderer {
             return Ok(events);
         };
 
-        if self.settings.is_open() {
-            events.extend(self.settings.handle_key(key));
-        } else {
-            let mode = if self.search_active {
-                InputMode::Search
-            } else {
-                InputMode::Normal
-            };
+        let mode = self.current_mode();
 
-            let ctx = InputContext {
-                has_songs: !self.songs.is_empty(),
-            };
-
-            if let Some(action) = self.input.handle_key(mode, ctx, key) {
-                self.apply_input_action(action, &mut events);
-            }
+        if let Some(action) = map_key(mode, key) {
+            self.apply_action(action, &mut events);
         }
 
         Ok(events)
@@ -490,14 +476,32 @@ impl UiRenderer for TuiRenderer {
 }
 
 impl TuiRenderer {
-    fn apply_input_action(&mut self, action: InputAction, events: &mut Vec<UiEvent>) {
+    fn current_mode(&self) -> InputMode {
+        if self.settings.is_open() {
+            if self.settings.is_editing_path() {
+                InputMode::SettingsTextEntry
+            } else {
+                InputMode::Settings
+            }
+        } else if self.search_active {
+            InputMode::Search
+        } else {
+            InputMode::Normal
+        }
+    }
+
+    fn apply_action(&mut self, action: InputAction, events: &mut Vec<UiEvent>) {
         match action {
             InputAction::Quit => events.push(UiEvent::QuitRequested),
             InputAction::OpenSettings => self.settings.open(),
 
-            InputAction::SearchEnter => events.push(UiEvent::SearchToggled { active: true }),
+            InputAction::EnterSearch => {
+                if !self.songs.is_empty() {
+                    events.push(UiEvent::SearchToggled { active: true });
+                }
+            }
             InputAction::SearchExit => events.push(UiEvent::SearchToggled { active: false }),
-            InputAction::SearchClearAll => {
+            InputAction::SearchClearLine => {
                 events.push(UiEvent::SearchQueryChanged {
                     query: String::new(),
                 });
@@ -528,11 +532,21 @@ impl TuiRenderer {
             InputAction::TogglePause => events.push(UiEvent::TogglePauseRequested),
             InputAction::NextTrack => events.push(UiEvent::NextTrackRequested),
             InputAction::PreviousTrack => events.push(UiEvent::PreviousTrackRequested),
-            InputAction::ShuffleToggle => events.push(UiEvent::ShuffleToggled {
+            InputAction::ToggleShuffle => events.push(UiEvent::ShuffleToggled {
                 shuffle_enabled: self.shuffle,
             }),
             InputAction::Refresh => events.push(UiEvent::RefreshRequested),
-            InputAction::SortCycle => events.push(UiEvent::SortCycleRequested),
+            InputAction::CycleSort => events.push(UiEvent::SortCycleRequested),
+
+            InputAction::SettingsClose
+            | InputAction::SettingsNavigateUp
+            | InputAction::SettingsNavigateDown
+            | InputAction::SettingsConfirm
+            | InputAction::SettingsLeft
+            | InputAction::SettingsRight
+            | InputAction::SettingsTypeChar(_)
+            | InputAction::SettingsBackspace
+            | InputAction::SettingsClearLine => events.extend(self.settings.apply_action(action)),
         }
     }
 }
