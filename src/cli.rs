@@ -7,6 +7,7 @@ use crate::utils::{APP_NAME, VOLUME_MAX};
 
 #[derive(Parser)]
 #[command(name = APP_NAME)]
+#[command(version)]
 #[command(about = "Lightweight terminal music player", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
