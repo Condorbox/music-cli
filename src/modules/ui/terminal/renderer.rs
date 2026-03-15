@@ -5,15 +5,18 @@ use crate::core::traits::UiRenderer;
 use crate::modules::playback::playback_progress::PlaybackProgress;
 use crate::modules::ui::progress_formatter::format_duration;
 use crate::modules::input::{map_key, InputAction, InputMode, KeyConfig};
+use crate::modules::ui::key_hints;
 use crate::utils::PROGRESS_BAR_WIDTH;
 use anyhow::Result;
 use crossterm::cursor::MoveTo;
-use crossterm::{event::{self, Event}, queue, terminal::{self, Clear, ClearType}};
+use crossterm::{event::{self, Event, KeyCode}, queue, terminal::{self, Clear, ClearType}};
 use std::io::{stdout, Write};
 use std::time::Duration;
 
 pub struct TerminalRenderer {
     initialized: bool,
+    key_config: KeyConfig,
+    key_config_synced: bool,
     shuffle_enabled: bool,
     current_song: Option<Song>,
     current_elapsed: Duration,
@@ -24,6 +27,8 @@ impl TerminalRenderer {
     pub fn new() -> Self {
         Self {
             initialized: false,
+            key_config: KeyConfig::default(),
+            key_config_synced: false,
             shuffle_enabled: false,
             current_song: None,
             current_elapsed: Duration::from_secs(0),
@@ -118,6 +123,37 @@ impl UiRenderer for TerminalRenderer {
     fn render(&mut self, state: &UiState) -> Result<()> {
         let mut stdout = stdout();
 
+        let pause_key = key_hints::pick_binding_with_preference(
+            &self.key_config,
+            InputMode::Normal,
+            InputAction::TogglePause,
+            &[key_hints::kb(KeyCode::Char(' '))],
+        );
+        let next_key = key_hints::pick_binding_with_preference(
+            &self.key_config,
+            InputMode::Normal,
+            InputAction::NextTrack,
+            &[key_hints::kb(KeyCode::Char('n'))],
+        );
+        let prev_key = key_hints::pick_binding_with_preference(
+            &self.key_config,
+            InputMode::Normal,
+            InputAction::PreviousTrack,
+            &[key_hints::kb(KeyCode::Char('b'))],
+        );
+        let shuffle_key = key_hints::pick_binding_with_preference(
+            &self.key_config,
+            InputMode::Normal,
+            InputAction::ToggleShuffle,
+            &[key_hints::kb(KeyCode::Char('r'))],
+        );
+        let quit_key = key_hints::pick_binding_with_preference(
+            &self.key_config,
+            InputMode::Normal,
+            InputAction::Quit,
+            &[key_hints::kb(KeyCode::Char('q'))],
+        );
+
         // Clear screen from top
         queue!(
             stdout,
@@ -165,7 +201,12 @@ impl UiRenderer for TerminalRenderer {
         queue!(stdout, MoveTo(0, 3))?;
         write!(
             stdout,
-            "  [Space: Pause | N: Next | B: Prev | R: Shuffle | Q: Quit]"
+            "  [{}: Pause | {}: Next | {}: Prev | {}: Shuffle | {}: Quit]",
+            key_hints::format_binding_opt(pause_key),
+            key_hints::format_binding_opt(next_key),
+            key_hints::format_binding_opt(prev_key),
+            key_hints::format_binding_opt(shuffle_key),
+            key_hints::format_binding_opt(quit_key),
         )?;
 
         stdout.flush()?;
@@ -174,6 +215,11 @@ impl UiRenderer for TerminalRenderer {
 
     fn poll_input(&mut self, config: &KeyConfig) -> Result<Vec<UiEvent>> {
         let mut events = Vec::new();
+
+        if !self.key_config_synced {
+            self.key_config = config.clone();
+            self.key_config_synced = true;
+        }
 
         if event::poll(Duration::from_millis(0))? {
             if let Event::Key(key) = event::read()? {

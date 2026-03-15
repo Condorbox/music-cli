@@ -1,4 +1,6 @@
 use crate::modules::ui::tui::settings_state::{PathValidation, SettingsField, SettingsState};
+use crate::modules::input::{InputAction, InputMode, KeyConfig};
+use crate::modules::ui::key_hints;
 use crate::utils::repeat_label;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -7,8 +9,9 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
+use crossterm::event::KeyCode;
 
-pub fn draw(f: &mut Frame, settings: &SettingsState) {
+pub fn draw(f: &mut Frame, settings: &SettingsState, key_config: &KeyConfig) {
     let height_pct = if settings.is_editing_path() { 60 } else { 50 };
     let area = centered_rect(60, height_pct, f.area());
     f.render_widget(Clear, area);
@@ -44,21 +47,50 @@ pub fn draw(f: &mut Frame, settings: &SettingsState) {
         ])
         .split(inner);
 
-    draw_volume(f, settings, chunks[0]);
-    draw_repeat(f, settings, chunks[1]);
-    draw_path(f, settings, chunks[2]);
+    draw_volume(f, settings, key_config, chunks[0]);
+    draw_repeat(f, settings, key_config, chunks[1]);
+    draw_path(f, settings, key_config, chunks[2]);
     draw_path_error(f, settings, chunks[3]);
-    draw_help(f, settings, chunks[5]);
+    draw_help(f, settings, key_config, chunks[5]);
 }
 
-fn draw_volume(f: &mut Frame, settings: &SettingsState, area: Rect) {
+fn draw_volume(f: &mut Frame, settings: &SettingsState, key_config: &KeyConfig, area: Rect) {
     let selected = settings.selected() == SettingsField::Volume;
     let editing = selected && settings.is_editing_volume();
 
     let label = if editing {
+        let left = key_hints::pick_binding_with_preference(
+            key_config,
+            InputMode::Settings,
+            InputAction::SettingsLeft,
+            &[key_hints::kb(KeyCode::Left)],
+        );
+        let right = key_hints::pick_binding_with_preference(
+            key_config,
+            InputMode::Settings,
+            InputAction::SettingsRight,
+            &[key_hints::kb(KeyCode::Right)],
+        );
+        let confirm = key_hints::pick_binding_with_preference(
+            key_config,
+            InputMode::Settings,
+            InputAction::SettingsConfirm,
+            &[key_hints::kb(KeyCode::Enter)],
+        );
+        let cancel = key_hints::pick_binding_with_preference(
+            key_config,
+            InputMode::Settings,
+            InputAction::SettingsClose,
+            &[key_hints::kb(KeyCode::Esc)],
+        );
+
         format!(
-            "Volume: {}%  [←/→ adjust • 0-9 type • Enter confirm • Esc cancel]",
-            settings.temp_volume()
+            "Volume: {}%  [{}/{} adjust • 0-9 type • {} confirm • {} cancel]",
+            settings.temp_volume(),
+            key_hints::format_binding_opt(left),
+            key_hints::format_binding_opt(right),
+            key_hints::format_binding_opt(confirm),
+            key_hints::format_binding_opt(cancel),
         )
     } else {
         format!("Volume: {}%", settings.temp_volume())
@@ -67,15 +99,37 @@ fn draw_volume(f: &mut Frame, settings: &SettingsState, area: Rect) {
     f.render_widget(Paragraph::new(label).style(field_style(selected)), area);
 }
 
-fn draw_repeat(f: &mut Frame, settings: &SettingsState, area: Rect) {
+fn draw_repeat(f: &mut Frame, settings: &SettingsState, key_config: &KeyConfig, area: Rect) {
     let selected = settings.selected() == SettingsField::Repeat;
     let temp_repeat = settings.temp_repeat();
 
     let label = if selected {
+        let left = key_hints::pick_binding_with_preference(
+            key_config,
+            InputMode::Settings,
+            InputAction::SettingsLeft,
+            &[key_hints::kb(KeyCode::Left)],
+        );
+        let right = key_hints::pick_binding_with_preference(
+            key_config,
+            InputMode::Settings,
+            InputAction::SettingsRight,
+            &[key_hints::kb(KeyCode::Right)],
+        );
+        let confirm = key_hints::pick_binding_with_preference(
+            key_config,
+            InputMode::Settings,
+            InputAction::SettingsConfirm,
+            &[key_hints::kb(KeyCode::Enter)],
+        );
+
         format!(
-            "Repeat: {} {}  [←/→ or Enter to cycle]",
+            "Repeat: {} {}  [{}/{} or {} to cycle]",
             temp_repeat.symbol(),
             repeat_label(temp_repeat),
+            key_hints::format_binding_opt(left),
+            key_hints::format_binding_opt(right),
+            key_hints::format_binding_opt(confirm),
         )
     } else {
         format!(
@@ -88,8 +142,14 @@ fn draw_repeat(f: &mut Frame, settings: &SettingsState, area: Rect) {
     f.render_widget(Paragraph::new(label).style(field_style(selected)), area);
 }
 
-fn draw_path(f: &mut Frame, settings: &SettingsState, area: Rect) {
+fn draw_path(f: &mut Frame, settings: &SettingsState, key_config: &KeyConfig, area: Rect) {
     let selected = settings.selected() == SettingsField::MusicPath;
+    let confirm = key_hints::pick_binding_with_preference(
+        key_config,
+        InputMode::Settings,
+        InputAction::SettingsConfirm,
+        &[key_hints::kb(KeyCode::Enter)],
+    );
 
     let label_color = if selected { Color::Yellow } else { Color::White };
     let hint_color = if selected { Color::Yellow } else { Color::DarkGray };
@@ -115,7 +175,10 @@ fn draw_path(f: &mut Frame, settings: &SettingsState, area: Rect) {
             Span::styled("(not set)", Style::default().fg(Color::DarkGray)),
         ];
         if selected {
-            spans.push(Span::styled("  [Enter to set]", Style::default().fg(hint_color)));
+            spans.push(Span::styled(
+                format!("  [{} to set]", key_hints::format_binding_opt(confirm)),
+                Style::default().fg(hint_color),
+            ));
         }
         Line::from(spans)
     } else {
@@ -125,7 +188,7 @@ fn draw_path(f: &mut Frame, settings: &SettingsState, area: Rect) {
         ];
         if selected {
             spans.push(Span::styled(
-                "  [Enter to change]",
+                format!("  [{} to change]", key_hints::format_binding_opt(confirm)),
                 Style::default().fg(hint_color),
             ));
         }
@@ -150,18 +213,91 @@ fn draw_path_error(f: &mut Frame, settings: &SettingsState, area: Rect) {
     }
 }
 
-fn draw_help(f: &mut Frame, settings: &SettingsState, area: Rect) {
+fn draw_help(f: &mut Frame, settings: &SettingsState, key_config: &KeyConfig, area: Rect) {
+    let nav_up = key_hints::pick_binding_with_preference(
+        key_config,
+        InputMode::Settings,
+        InputAction::SettingsNavigateUp,
+        &[key_hints::kb(KeyCode::Up)],
+    );
+    let nav_down = key_hints::pick_binding_with_preference(
+        key_config,
+        InputMode::Settings,
+        InputAction::SettingsNavigateDown,
+        &[key_hints::kb(KeyCode::Down)],
+    );
+    let confirm = key_hints::pick_binding_with_preference(
+        key_config,
+        InputMode::Settings,
+        InputAction::SettingsConfirm,
+        &[key_hints::kb(KeyCode::Enter)],
+    );
+    let left = key_hints::pick_binding_with_preference(
+        key_config,
+        InputMode::Settings,
+        InputAction::SettingsLeft,
+        &[key_hints::kb(KeyCode::Left)],
+    );
+    let right = key_hints::pick_binding_with_preference(
+        key_config,
+        InputMode::Settings,
+        InputAction::SettingsRight,
+        &[key_hints::kb(KeyCode::Right)],
+    );
+    let close_keys = {
+        let ordered = key_hints::ordered_bindings_with_preference(
+            key_config,
+            InputMode::Settings,
+            InputAction::SettingsClose,
+            &[key_hints::kb(KeyCode::Char('s')), key_hints::kb(KeyCode::Esc)],
+        );
+        let limited: Vec<_> = ordered.into_iter().take(2).collect();
+        key_hints::format_bindings_join(&limited)
+    };
+    let cancel = key_hints::pick_binding_with_preference(
+        key_config,
+        InputMode::Settings,
+        InputAction::SettingsClose,
+        &[key_hints::kb(KeyCode::Esc)],
+    );
+
     let text = if settings.is_editing_volume() {
-        "←/→: Adjust  •  0-9: Type value  •  Enter: Confirm  •  Esc: Cancel"
+        format!(
+            "{}/{}: Adjust  •  0-9: Type value  •  {}: Confirm  •  {}: Cancel",
+            key_hints::format_binding_opt(left),
+            key_hints::format_binding_opt(right),
+            key_hints::format_binding_opt(confirm),
+            key_hints::format_binding_opt(cancel)
+        )
     } else if settings.is_editing_path() {
-        "Type path  •  Enter: Confirm  •  Esc: Cancel  •  Ctrl+U: Clear"
+        "Type path  •  Enter: Confirm  •  Esc: Cancel  •  Ctrl+U: Clear".to_string()
     } else {
         match settings.selected() {
-            SettingsField::Volume => "↑/↓: Navigate  •  Enter: Edit volume  •  s/Esc: Close",
+            SettingsField::Volume => format!(
+                "{}/{}: Navigate  •  {}: Edit volume  •  {}: Close",
+                key_hints::format_binding_opt(nav_up),
+                key_hints::format_binding_opt(nav_down),
+                key_hints::format_binding_opt(confirm),
+                close_keys
+            ),
             SettingsField::Repeat => {
-                "↑/↓: Navigate  •  ←/→ or Enter: Cycle mode  •  s/Esc: Close"
+                format!(
+                    "{}/{}: Navigate  •  {}/{} or {}: Cycle mode  •  {}: Close",
+                    key_hints::format_binding_opt(nav_up),
+                    key_hints::format_binding_opt(nav_down),
+                    key_hints::format_binding_opt(left),
+                    key_hints::format_binding_opt(right),
+                    key_hints::format_binding_opt(confirm),
+                    close_keys
+                )
             }
-            SettingsField::MusicPath => "↑/↓: Navigate  •  Enter: Edit path  •  s/Esc: Close",
+            SettingsField::MusicPath => format!(
+                "{}/{}: Navigate  •  {}: Edit path  •  {}: Close",
+                key_hints::format_binding_opt(nav_up),
+                key_hints::format_binding_opt(nav_down),
+                key_hints::format_binding_opt(confirm),
+                close_keys
+            ),
         }
     };
 
@@ -202,4 +338,3 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         ])
         .split(popup_layout[1])[1]
 }
-

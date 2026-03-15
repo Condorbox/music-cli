@@ -1,4 +1,5 @@
 use super::{defaults, InputAction, InputMode, KeyBinding};
+use crossterm::event::{KeyCode, KeyModifiers};
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
@@ -69,6 +70,38 @@ impl KeyConfig {
 
     pub fn is_repeat_suppressed(&self, mode: InputMode, binding: &KeyBinding) -> bool {
         self.repeat_suppressed.contains(&(mode, *binding))
+    }
+
+    /// Returns all bindings for the given action in the given mode.
+    ///
+    /// The result is sorted by the binding's display string for stable UI output.
+    pub fn bindings_for_action(&self, mode: InputMode, action: InputAction) -> Vec<KeyBinding> {
+        let mut out: Vec<KeyBinding> = self
+            .bindings
+            .iter()
+            .filter_map(|((m, binding), a)| {
+                if *m == mode && *a == action {
+                    Some(*binding)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        out.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+        out.dedup();
+        out
+    }
+
+    /// Returns bindings that are meaningful to display for the given mode.
+    ///
+    /// Some keys are structurally reserved by the input handler and will never reach
+    /// the config lookup (e.g. typing in search). Those are filtered out to avoid
+    /// showing misleading hints in the UI.
+    pub fn hint_bindings_for_action(&self, mode: InputMode, action: InputAction) -> Vec<KeyBinding> {
+        let mut out = self.bindings_for_action(mode, action);
+        out.retain(|binding| is_hint_reachable_binding(mode, binding));
+        out
     }
 
     fn parse(toml_str: &str) -> Result<Self, String> {
@@ -143,6 +176,18 @@ impl KeyConfig {
     fn clear_action(&mut self, mode: InputMode, action: InputAction) {
         self.bindings
             .retain(|(m, _binding), a| !(*m == mode && *a == action));
+    }
+}
+
+fn is_hint_reachable_binding(mode: InputMode, binding: &KeyBinding) -> bool {
+    match mode {
+        InputMode::Search => match binding.code {
+            KeyCode::Backspace => false,
+            KeyCode::Char(_) if !binding.modifiers.contains(KeyModifiers::CONTROL) => false,
+            _ => true,
+        },
+        InputMode::Settings => !matches!(binding.code, KeyCode::Backspace),
+        _ => true,
     }
 }
 
@@ -521,6 +566,46 @@ open_settings = "o"
         assert_eq!(
             cfg.get(InputMode::Settings, &ctrl(KeyCode::Char('u'))),
             Some(InputAction::SettingsClearLine)
+        );
+    }
+
+    #[test]
+    fn hint_bindings_filter_search_typing_keys() {
+        let toml_str = r#"
+[search]
+navigate_down = ["j", "Down", "Ctrl+j", "Backspace"]
+"#;
+        let cfg = KeyConfig::parse(toml_str).unwrap();
+        let bindings = cfg.hint_bindings_for_action(InputMode::Search, InputAction::NavigateDown);
+        assert_eq!(
+            bindings,
+            vec![
+                KeyBinding {
+                    code: KeyCode::Char('j'),
+                    modifiers: KeyModifiers::CONTROL,
+                },
+                KeyBinding {
+                    code: KeyCode::Down,
+                    modifiers: KeyModifiers::NONE,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn hint_bindings_filter_settings_backspace() {
+        let toml_str = r#"
+[settings]
+settings_confirm = ["Backspace", "Enter"]
+"#;
+        let cfg = KeyConfig::parse(toml_str).unwrap();
+        let bindings = cfg.hint_bindings_for_action(InputMode::Settings, InputAction::SettingsConfirm);
+        assert_eq!(
+            bindings,
+            vec![KeyBinding {
+                code: KeyCode::Enter,
+                modifiers: KeyModifiers::NONE,
+            }]
         );
     }
 }

@@ -3,9 +3,10 @@ use crate::core::events::UiEvent;
 use crate::core::traits::UiRenderer;
 use crate::modules::input::{map_key, InputAction, InputMode, KeyConfig};
 use crate::modules::ui::progress_formatter::format_duration;
+use crate::modules::ui::key_hints;
 use anyhow::Result;
 use crossterm::{
-    event::{self, Event},
+    event::{self, Event, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -33,6 +34,9 @@ pub struct TuiRenderer {
     terminal: Option<Terminal<CrosstermBackend<Stdout>>>,
     list_state: RefCell<ListState>,
 
+    key_config: KeyConfig,
+    key_config_synced: bool,
+
     // Display state (synced from AppState)
     songs: Arc<Vec<crate::core::models::Song>>,
     current_song: Option<crate::core::models::Song>,
@@ -53,6 +57,8 @@ impl TuiRenderer {
         Self {
             terminal: None,
             list_state: RefCell::new(ListState::default()),
+            key_config: KeyConfig::default(),
+            key_config_synced: false,
             songs: Arc::new(Vec::new()),
             current_song: None,
             is_paused: false,
@@ -79,7 +85,7 @@ impl TuiRenderer {
                 Constraint::Length(3), // Header
                 Constraint::Min(0),    // Main content
                 Constraint::Length(5), // Now playing (with progress bar)
-                Constraint::Length(3), // Search bar
+                Constraint::Length(4), // Search bar (query + help)
             ]
         } else {
             vec![
@@ -106,7 +112,7 @@ impl TuiRenderer {
         }
 
         if self.settings.is_open() {
-            settings_view::draw(f, &self.settings);
+            settings_view::draw(f, &self.settings, &self.key_config);
         }
     }
 
@@ -290,18 +296,124 @@ impl TuiRenderer {
     }
 
     fn draw_controls(&self, f: &mut Frame, area: Rect) {
+        let cfg = &self.key_config;
+
+        let nav_up = key_hints::pick_binding_with_preference(
+            cfg,
+            InputMode::Normal,
+            InputAction::NavigateUp,
+            &[key_hints::kb(KeyCode::Up)],
+        );
+        let nav_down = key_hints::pick_binding_with_preference(
+            cfg,
+            InputMode::Normal,
+            InputAction::NavigateDown,
+            &[key_hints::kb(KeyCode::Down)],
+        );
+        let play = key_hints::pick_binding_with_preference(
+            cfg,
+            InputMode::Normal,
+            InputAction::PlaySelected,
+            &[key_hints::kb(KeyCode::Enter)],
+        );
+        let pause = key_hints::pick_binding_with_preference(
+            cfg,
+            InputMode::Normal,
+            InputAction::TogglePause,
+            &[key_hints::kb(KeyCode::Char(' '))],
+        );
+        let next = key_hints::pick_binding_with_preference(
+            cfg,
+            InputMode::Normal,
+            InputAction::NextTrack,
+            &[key_hints::kb(KeyCode::Char('n'))],
+        );
+        let prev = key_hints::pick_binding_with_preference(
+            cfg,
+            InputMode::Normal,
+            InputAction::PreviousTrack,
+            &[key_hints::kb(KeyCode::Char('b'))],
+        );
+        let shuffle = key_hints::pick_binding_with_preference(
+            cfg,
+            InputMode::Normal,
+            InputAction::ToggleShuffle,
+            &[key_hints::kb(KeyCode::Char('r'))],
+        );
+        let search = key_hints::pick_binding_with_preference(
+            cfg,
+            InputMode::Normal,
+            InputAction::EnterSearch,
+            &[key_hints::kb(KeyCode::Char('/'))],
+        );
+        let refresh = key_hints::pick_binding_with_preference(
+            cfg,
+            InputMode::Normal,
+            InputAction::Refresh,
+            &[key_hints::kb(KeyCode::F(5))],
+        );
+        let settings = key_hints::pick_binding_with_preference(
+            cfg,
+            InputMode::Normal,
+            InputAction::OpenSettings,
+            &[key_hints::kb(KeyCode::Char('s'))],
+        );
+        let sort = key_hints::pick_binding_with_preference(
+            cfg,
+            InputMode::Normal,
+            InputAction::CycleSort,
+            &[key_hints::kb(KeyCode::Char('o'))],
+        );
+        let quit = key_hints::pick_binding_with_preference(
+            cfg,
+            InputMode::Normal,
+            InputAction::Quit,
+            &[key_hints::kb(KeyCode::Char('q'))],
+        );
+
         let controls = Paragraph::new(vec![Line::from(vec![
-            Span::raw("↑/↓: Navigate • "),
-            Span::raw("Enter: Play • "),
-            Span::raw("Space: Pause/Play • "),
-            Span::raw("n: Next • "),
-            Span::raw("b: Previous • "),
-            Span::styled("r: Shuffle • ", Style::default().fg(Color::Cyan)),
-            Span::styled("/: Search • ", Style::default().fg(Color::Yellow)),
-            Span::styled("F5: Refresh • ", Style::default().fg(Color::Green)),
-            Span::raw("s: Settings • "),
-            Span::raw("o: Sort • "),
-            Span::raw("q: Quit"),
+            Span::raw(format!(
+                "{}/{}: Navigate • ",
+                key_hints::format_binding_opt(nav_up),
+                key_hints::format_binding_opt(nav_down)
+            )),
+            Span::raw(format!(
+                "{}: Play • ",
+                key_hints::format_binding_opt(play)
+            )),
+            Span::raw(format!(
+                "{}: Pause/Play • ",
+                key_hints::format_binding_opt(pause)
+            )),
+            Span::raw(format!(
+                "{}: Next • ",
+                key_hints::format_binding_opt(next)
+            )),
+            Span::raw(format!(
+                "{}: Previous • ",
+                key_hints::format_binding_opt(prev)
+            )),
+            Span::styled(
+                format!("{}: Shuffle • ", key_hints::format_binding_opt(shuffle)),
+                Style::default().fg(Color::Cyan),
+            ),
+            Span::styled(
+                format!("{}: Search • ", key_hints::format_binding_opt(search)),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::styled(
+                format!("{}: Refresh • ", key_hints::format_binding_opt(refresh)),
+                Style::default().fg(Color::Green),
+            ),
+            Span::raw(format!(
+                "{}: Settings • ",
+                key_hints::format_binding_opt(settings)
+            )),
+            Span::raw(format!(
+                "{}: Sort • ",
+                key_hints::format_binding_opt(sort)
+            )),
+            Span::raw(format!("{}: Quit", key_hints::format_binding_opt(quit))),
         ])])
             .style(Style::default().fg(Color::Gray))
             .block(Block::default().borders(Borders::ALL).title(" Controls "));
@@ -309,6 +421,38 @@ impl TuiRenderer {
     }
 
     fn draw_search_bar(&self, f: &mut Frame, area: Rect) {
+        let cfg = &self.key_config;
+        let exit = key_hints::pick_binding_with_preference(
+            cfg,
+            InputMode::Search,
+            InputAction::SearchExit,
+            &[key_hints::kb(KeyCode::Esc)],
+        );
+        let play = key_hints::pick_binding_with_preference(
+            cfg,
+            InputMode::Search,
+            InputAction::PlaySelected,
+            &[key_hints::kb(KeyCode::Enter)],
+        );
+        let nav_up = key_hints::pick_binding_with_preference(
+            cfg,
+            InputMode::Search,
+            InputAction::NavigateUp,
+            &[key_hints::kb(KeyCode::Up)],
+        );
+        let nav_down = key_hints::pick_binding_with_preference(
+            cfg,
+            InputMode::Search,
+            InputAction::NavigateDown,
+            &[key_hints::kb(KeyCode::Down)],
+        );
+        let clear = key_hints::pick_binding_with_preference(
+            cfg,
+            InputMode::Search,
+            InputAction::SearchClearLine,
+            &[key_hints::kb_ctrl_char('u')],
+        );
+
         let search_text = vec![
             Line::from(vec![
                 Span::styled("Search: ", Style::default().fg(Color::Yellow)),
@@ -316,11 +460,24 @@ impl TuiRenderer {
                 Span::styled("█", Style::default().fg(Color::Gray)),
             ]),
             Line::from(vec![
-                Span::raw("Esc: Clear • "),
-                Span::raw("Enter: Play • "),
-                Span::raw("↑/↓: Navigate • "),
+                Span::raw(format!(
+                    "{}: Exit • ",
+                    key_hints::format_binding_opt(exit)
+                )),
+                Span::raw(format!(
+                    "{}: Play • ",
+                    key_hints::format_binding_opt(play)
+                )),
+                Span::raw(format!(
+                    "{}/{}: Navigate • ",
+                    key_hints::format_binding_opt(nav_up),
+                    key_hints::format_binding_opt(nav_down)
+                )),
                 Span::raw("Backspace: Delete • "),
-                Span::raw("Ctrl+U: Clear All"),
+                Span::raw(format!(
+                    "{}: Clear All",
+                    key_hints::format_binding_opt(clear)
+                )),
             ]),
         ];
 
@@ -424,6 +581,11 @@ impl UiRenderer for TuiRenderer {
 
     fn poll_input(&mut self, config: &KeyConfig) -> Result<Vec<UiEvent>> {
         let mut events = Vec::new();
+
+        if !self.key_config_synced {
+            self.key_config = config.clone();
+            self.key_config_synced = true;
+        }
 
         if !event::poll(Duration::from_millis(0))? {
             return Ok(events);
