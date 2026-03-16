@@ -1,7 +1,14 @@
 [package]
 name = "music-cli"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
+description = "Lightweight terminal music player"
+license = "MIT"
+repository = "https://github.com/Condorbox/music-cli"
+homepage = "https://github.com/Condorbox/music-cli"
+readme = "README.md"
+keywords = ["music", "player", "cli", "tui", "terminal"]
+categories = ["command-line-utilities", "multimedia::audio"]
 
 [dependencies]
 clap = { version = "4.5.54", features = ["derive"] }
@@ -18,3 +25,8 @@ ratatui = "0.30.0"
 crossbeam-channel = "0.5.15"
 fuzzy-matcher = "0.3.7"
 rand = "0.10.0"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
