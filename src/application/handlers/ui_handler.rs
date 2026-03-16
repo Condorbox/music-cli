@@ -90,19 +90,26 @@ impl UiHandler {
             }
 
             UiEvent::PathChangeRequested { path } => {
-                if !path.is_dir() {
-                    ctx.event_tx.send(AppEvent::Ui(UiEvent::ShowError {
-                        message: "Invalid directory path".to_string(),
-                    }))?;
-                    return Ok(());
+                match path.canonicalize() {
+                    Ok(canonical) if canonical.is_dir() => {
+                        ctx.state.lock().unwrap().config.root_path = Some(canonical);
+                        ctx.persist_state()?;
+                        ctx.event_tx.send(AppEvent::Ui(UiEvent::ShowMessage {
+                            message: "Music path updated. Run refresh to scan.".to_string(),
+                        }))?;
+                    }
+                    Ok(_) => {
+                        ctx.event_tx.send(AppEvent::Ui(UiEvent::ShowError {
+                            message: "Path exists but is not a directory.".to_string(),
+                        }))?;
+                    }
+                    Err(e) => {
+                        ctx.event_tx.send(AppEvent::Ui(UiEvent::ShowError {
+                            message: format!("Invalid path: {}", e),
+                        }))?;
+                    }
                 }
 
-                ctx.state.lock().unwrap().config.root_path = Some(path.clone());
-                ctx.persist_state()?;
-
-                ctx.event_tx.send(AppEvent::Ui(UiEvent::ShowMessage {
-                    message: "Music path updated. Run refresh to scan.".to_string(),
-                }))?;
             }
 
             UiEvent::SearchToggled { active } => {
