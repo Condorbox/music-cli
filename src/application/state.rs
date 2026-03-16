@@ -58,6 +58,9 @@ pub struct LibraryState {
     pub is_scanning: bool,
 
     #[serde(skip)]
+    pub scan_progress: usize,
+
+    #[serde(skip)]
     pub last_scan_path: Option<PathBuf>,
 }
 
@@ -121,6 +124,7 @@ impl Default for LibraryState {
             songs: Arc::new(Vec::new()),
             active_sort: None,
             is_scanning: false,
+            scan_progress: 0,
             last_scan_path: None,
         }
     }
@@ -207,17 +211,20 @@ impl AppState {
             AppEvent::Library(le) => match le {
                 LibraryEvent::ScanStarted { path } => {
                     self.library.is_scanning = true;
+                    self.library.scan_progress = 0;
                     self.library.last_scan_path = Some(path.clone());
                     self.ui.status_message = format!("Scanning {:?}...", path);
                     self.ui.error_message = None;
                 }
                 LibraryEvent::ScanProgress { found } => {
+                    self.library.scan_progress = *found;
                     self.ui.status_message = format!("Scanning... found {} songs", found);
                 }
                 LibraryEvent::ScanCompleted { songs, count } => {
                     // Wrap in a new Arc — this is the only allocation on the hot path.
                     self.library.songs = Arc::new(songs.clone());
                     self.library.is_scanning = false;
+                    self.library.scan_progress = 0;
                     self.library.active_sort = None;
                     self.ui.status_message = format!("Found {} songs", count);
 
@@ -232,6 +239,7 @@ impl AppState {
                 }
                 LibraryEvent::ScanFailed { path, message } => {
                     self.library.is_scanning = false;
+                    self.library.scan_progress = 0;
                     self.library.last_scan_path = Some(path.clone());
                     self.ui.status_message = format!("Scan failed: {}", message);
                     self.ui.error_message = Some(message.clone());
@@ -527,6 +535,19 @@ mod tests {
         assert!(state.ui.error_message.is_none());
     }
 
+    #[test]
+    fn scan_started_resets_scan_progress() {
+        let mut state = AppState::default();
+        state.library.scan_progress = 42;
+
+        apply(&mut state, AppEvent::Library(LibraryEvent::ScanStarted {
+            path: PathBuf::from("/music"),
+        }));
+
+        assert_eq!(state.library.scan_progress, 0);
+        assert!(state.library.is_scanning);
+    }
+
     // ── LibraryEvent::ScanProgress ────────────────────────────────────────────
 
     #[test]
@@ -536,6 +557,17 @@ mod tests {
         apply(&mut state, AppEvent::Library(LibraryEvent::ScanProgress { found: 42 }));
 
         assert!(state.ui.status_message.contains("42"));
+    }
+
+    #[test]
+    fn scan_progress_updates_count_and_status() {
+        let mut state = AppState::default();
+        state.library.is_scanning = true;
+
+        apply(&mut state, AppEvent::Library(LibraryEvent::ScanProgress { found: 25 }));
+
+        assert_eq!(state.library.scan_progress, 25);
+        assert!(state.ui.status_message.contains("25"));
     }
 
     // ── LibraryEvent::ScanCompleted ───────────────────────────────────────────
@@ -600,6 +632,38 @@ mod tests {
         assert!(!state.playback.is_playing, "is_playing must be false");
         assert_eq!(state.playback.current_index, None, "current_index must be cleared");
         assert_eq!(state.playback.current_elapsed, Duration::ZERO);
+    }
+
+    #[test]
+    fn scan_completed_resets_scan_progress() {
+        let mut state = AppState::default();
+        state.library.is_scanning = true;
+        state.library.scan_progress = 75;
+
+        apply(&mut state, AppEvent::Library(LibraryEvent::ScanCompleted {
+            songs: vec![make_song("A")],
+            count: 1,
+        }));
+
+        assert!(!state.library.is_scanning);
+        assert_eq!(state.library.scan_progress, 0);
+    }
+
+    // // ── LibraryEvent::ScanFailed ───────────────────────────────────────────
+
+    #[test]
+    fn scan_failed_resets_scan_progress() {
+        let mut state = AppState::default();
+        state.library.is_scanning = true;
+        state.library.scan_progress = 10;
+
+        apply(&mut state, AppEvent::Library(LibraryEvent::ScanFailed {
+            path: PathBuf::from("/music"),
+            message: "permission denied".to_owned(),
+        }));
+
+        assert!(!state.library.is_scanning);
+        assert_eq!(state.library.scan_progress, 0);
     }
 
     // ── LibraryEvent::LibraryLoaded ───────────────────────────────────────────

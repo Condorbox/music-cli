@@ -70,7 +70,11 @@ impl LibraryHandler {
                 let scan_path = path.clone();
 
                 thread::spawn(move || {
-                    match scanner::scan_directory(&scan_path) {
+                    match scanner::scan_directory(&scan_path, |found| {
+                        // drop the event if the channel is full or closed
+                        let _ = event_tx
+                            .send(AppEvent::Library(LibraryEvent::ScanProgress { found }));
+                    }) {
                         Ok(songs) => {
                             let count = songs.len();
                             if let Err(err) = event_tx.send(AppEvent::Library(LibraryEvent::ScanCompleted {

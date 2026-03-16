@@ -14,6 +14,8 @@ pub const VOLUME_STEP: u8 = 5;
 pub const VOLUME_CURVE_EXPONENT: i32 = 4;
 pub const CLI_PLAYBACK_POLL_MS: u64 = 100;
 
+pub const SCAN_PROGRESS_INTERVAL: usize = 25;
+
 /// Convert user volume percentage (0-100) to amplitude multiplier using perceptual scaling
 ///
 /// Human hearing is logarithmic, so we use x^4 to approximate an exponential curve.

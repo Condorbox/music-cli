@@ -46,6 +46,8 @@ pub struct TuiRenderer {
     search_query: String,
     search_results: Vec<(usize, crate::core::models::Song)>,
     shuffle: bool,
+    is_scanning: bool,
+    scan_progress: usize,
 
     settings: SettingsState,
 
@@ -66,6 +68,8 @@ impl TuiRenderer {
             search_query: String::new(),
             search_results: Vec::new(),
             shuffle: false,
+            is_scanning: false,
+            scan_progress: 0,
             current_elapsed: Duration::from_secs(0),
             settings: SettingsState::default(),
             active_sort: None,
@@ -171,13 +175,29 @@ impl TuiRenderer {
         };
 
         let sort_label = if self.search_active { "" } else { active_sort_label(self.active_sort) };
-        let list_title = format!(" Library ({} songs{}) {} ", total_count, match_info, sort_label);
+
+        let list_title = if self.is_scanning {
+            if self.scan_progress > 0 {
+                format!(" Library (Scanning... {} found) ", self.scan_progress)
+            } else {
+                " Library (Scanning...) ".to_string()
+            }
+        } else {
+            format!(" Library ({} songs{}) {} ", total_count, match_info, sort_label)
+        };
 
         let list = List::new(items)
-            .block(Block::default().borders(Borders::ALL).title(list_title))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(list_title)
+                    .title_style(if self.is_scanning {
+                        Style::default().fg(Color::Yellow)
+                    } else {
+                        Style::default()
+                    }),
+            )
             .highlight_style(
-                // DarkGray bg is kept (user's preference).
-                // BOLD ensures all span text punches through the background.
                 Style::default()
                     .bg(Color::DarkGray)
                     .add_modifier(Modifier::BOLD),
@@ -619,6 +639,9 @@ impl UiRenderer for TuiRenderer {
         // Sync shuffle state
         self.shuffle = app_state.config.shuffle;
         self.settings.sync_from_app_state(app_state);
+
+        self.is_scanning   = app_state.library.is_scanning;
+        self.scan_progress = app_state.library.scan_progress;
 
         // Update selected index
         if let Some(index) = app_state.ui.selected_index {

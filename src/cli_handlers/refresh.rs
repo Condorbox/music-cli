@@ -21,7 +21,7 @@ impl CliCommand for RefreshCommand {
 
         ctx.ui.print_message(&format!("Scanning {:?}...", root_path));
 
-        let songs = scanner::scan_directory(&root_path)?;
+        let songs = scanner::scan_directory(&root_path, |_| {})?;
         let count = songs.len();
 
         ctx.state.library.songs = Arc::new(songs);
