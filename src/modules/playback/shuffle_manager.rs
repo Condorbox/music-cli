@@ -34,12 +34,6 @@ impl ShuffleManager {
         }
     }
 
-    /// Toggle shuffle on/off
-    pub fn toggle(&mut self) -> bool {
-        self.set_enabled(!self.enabled);
-        self.enabled
-    }
-
     /// Set shuffle state explicitly
     pub fn set_enabled(&mut self, enabled: bool) {
         if self.enabled == enabled {
@@ -186,6 +180,7 @@ impl ShuffleManager {
     }
 
     /// Get current position in shuffle queue (for debugging/display)
+    #[cfg(test)]
     pub fn queue_position(&self) -> usize {
         self.queue_position
     }
@@ -232,16 +227,7 @@ mod tests {
         assert_eq!(m.remaining_in_pass(), 0);
     }
 
-    // ── toggle / set_enabled ──────────────────────────────────────────────────
-
-    #[test]
-    fn toggle_flips_enabled_and_returns_new_state() {
-        let mut m = ShuffleManager::new();
-        assert!(m.toggle());  // false → true
-        assert!(m.is_enabled());
-        assert!(!m.toggle()); // true → false
-        assert!(!m.is_enabled());
-    }
+    // ── set_enabled ──────────────────────────────────────────────────
 
     #[test]
     fn set_enabled_same_value_is_noop() {

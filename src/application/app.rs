@@ -82,11 +82,6 @@ impl Application {
         self.event_tx.clone()
     }
 
-    /// Get current state (read-only)
-    pub fn state(&self) -> AppState {
-        self.state.lock().unwrap().clone()
-    }
-
     /// Initialize the application
     pub fn init(&mut self) -> Result<()> {
         // Resolve config directory early so modules can load configuration.

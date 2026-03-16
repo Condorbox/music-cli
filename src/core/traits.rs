@@ -28,14 +28,8 @@ pub trait PlaybackBackend: Send {
     /// Check if track has finished
     fn has_finished(&self) -> bool;
 
-    /// Get current song
-    fn current_song(&self) -> Option<&Song>;
-
     /// Set volume (0.0 - 1.0)
     fn set_volume(&mut self, volume: f32);
-
-    /// Get volume
-    fn volume(&self) -> f32;
 
     /// Get current playback position (elapsed time)
     /// Returns Duration::ZERO if not playing

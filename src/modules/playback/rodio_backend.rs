@@ -73,16 +73,8 @@ impl PlaybackBackend for RodioBackend {
         self.current_song.is_some() && self.player.empty()
     }
 
-    fn current_song(&self) -> Option<&Song> {
-        self.current_song.as_ref()
-    }
-
     fn set_volume(&mut self, volume: f32) {
         self.player.set_volume(volume.clamp(0.0, 1.0));
-    }
-
-    fn volume(&self) -> f32 {
-        self.player.volume()
     }
 
     fn position(&self) -> Duration {

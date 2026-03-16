@@ -35,12 +35,6 @@ pub enum PlaybackEvent {
     /// Current track finished
     TrackFinished,
 
-    /// Playback stopped
-    Stopped,
-
-    /// Playback error occurred
-    Error { message: String },
-
     /// Volume changed (0.0 - 1.0)
     VolumeChanged { volume: f32 },
 

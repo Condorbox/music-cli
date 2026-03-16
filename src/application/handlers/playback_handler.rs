@@ -80,9 +80,7 @@ impl PlaybackHandler {
             // update state — already handled by AppState::apply_event.
             PlaybackEvent::Started { .. }
             | PlaybackEvent::Paused
-            | PlaybackEvent::Resumed
-            | PlaybackEvent::Stopped
-            | PlaybackEvent::Error { .. } => {}
+            | PlaybackEvent::Resumed => {}
         }
 
         Ok(())

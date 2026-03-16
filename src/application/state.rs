@@ -183,21 +183,12 @@ impl AppState {
                         self.ui.status_message = format!("Playing: {}", song.title);
                     }
                 }
-                PlaybackEvent::Stopped => {
-                    self.playback.is_playing = false;
-                    self.playback.is_paused = false;
-                    self.playback.current_song = None;
-                    self.ui.status_message = "Stopped".to_string();
-                }
                 PlaybackEvent::TrackFinished => {
                     self.playback.is_playing = false;
                     // Don't clear current_song - might still want to display it
                 }
                 PlaybackEvent::VolumeChanged { volume } => {
                     self.config.volume = *volume;
-                }
-                PlaybackEvent::Error { message } => {
-                    self.ui.error_message = Some(message.clone());
                 }
                 PlaybackEvent::Shuffle { enabled} => {
                     self.config.shuffle = *enabled;
@@ -433,23 +424,6 @@ mod tests {
         assert!(!state.playback.is_paused);
     }
 
-    // ── PlaybackEvent::Stopped ────────────────────────────────────────────────
-
-    #[test]
-    fn stopped_clears_all_playback_state() {
-        let mut state = AppState::default();
-        state.playback.current_song = Some(make_song("A Song"));
-        state.playback.is_playing = true;
-        state.playback.is_paused = true;
-
-        apply(&mut state, AppEvent::Playback(PlaybackEvent::Stopped));
-
-        assert!(!state.playback.is_playing);
-        assert!(!state.playback.is_paused);
-        assert!(state.playback.current_song.is_none());
-        assert_eq!(state.ui.status_message, "Stopped");
-    }
-
     // ── PlaybackEvent::TrackFinished ──────────────────────────────────────────
 
     #[test]
@@ -505,19 +479,6 @@ mod tests {
 
         apply(&mut state, AppEvent::Playback(PlaybackEvent::RepeatChanged { mode: RepeatMode::One }));
         assert_eq!(state.config.repeat, RepeatMode::One);
-    }
-
-    // ── PlaybackEvent::Error ──────────────────────────────────────────────────
-
-    #[test]
-    fn error_event_sets_error_message() {
-        let mut state = AppState::default();
-
-        apply(&mut state, AppEvent::Playback(PlaybackEvent::Error {
-            message: "codec error".to_owned(),
-        }));
-
-        assert_eq!(state.ui.error_message.as_deref(), Some("codec error"));
     }
 
     // ── LibraryEvent::ScanStarted ─────────────────────────────────────────────

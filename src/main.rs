@@ -1,3 +1,5 @@
+#![deny(dead_code, unused_imports, unused_variables)]
+
 mod cli;
 mod cli_handlers;
 mod core;
