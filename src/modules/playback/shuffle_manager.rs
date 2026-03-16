@@ -100,14 +100,9 @@ impl ShuffleManager {
 
             // EDGE CASE FIX: Ensure the first song of new queue isn't the same as the last song
             // (Only matters if playlist size > 1)
-            if self.playlist_size > 1 {
-                if let (Some(last), Some(first)) = (last_played, self.shuffle_queue.first()) {
-                    if last == *first {
-                        // Swap first element with the last element to break the repeat
-                        let last_idx = self.shuffle_queue.len() - 1;
-                        self.shuffle_queue.swap(0, last_idx);
-                    }
-                }
+            if self.playlist_size > 1 && last_played == self.shuffle_queue.first().copied() {
+                let last_idx = self.shuffle_queue.len() - 1;
+                self.shuffle_queue.swap(0, last_idx);
             }
 
             // Reset position for new queue
@@ -157,10 +152,8 @@ impl ShuffleManager {
 
         // Logic: If a specific song MUST be first (because it's currently playing
         // when we enabled shuffle), swap it to position 0.
-        if let Some(first) = force_first {
-            if let Some(pos) = indices.iter().position(|&i| i == first) {
-                indices.swap(0, pos);
-            }
+        if let Some(pos) = force_first.and_then(|f| indices.iter().position(|&i| i == f)) {
+            indices.swap(0, pos);
         }
 
         self.shuffle_queue = indices;

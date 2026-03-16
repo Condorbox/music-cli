@@ -70,34 +70,27 @@ impl TerminalRenderer {
     }
 
     fn render_progress_bar(&self, stdout: &mut impl Write) -> Result<()> {
-        if let Some(song) = &self.current_song {
-            if let Some(total) = song.duration {
-                if let Some(progress) = PlaybackProgress::new(self.current_elapsed, total) {
-                    let filled =
-                        (progress.ratio() * PROGRESS_BAR_WIDTH as f64).round() as usize;
+        // Flatten the nested Options into a single progress object
+        let Some(progress) = self.current_song
+            .as_ref()
+            .and_then(|song| song.duration)
+            .and_then(|total| PlaybackProgress::new(self.current_elapsed, total))
+        else {
+            return Ok(());
+        };
 
-                    let filled = filled.min(PROGRESS_BAR_WIDTH);
-                    let empty = PROGRESS_BAR_WIDTH - filled;
+        // Calculate bar segments
+        let filled = ((progress.ratio() * PROGRESS_BAR_WIDTH as f64).round() as usize)
+            .min(PROGRESS_BAR_WIDTH);
+        let empty = PROGRESS_BAR_WIDTH - filled;
 
-                    write!(
-                        stdout,
-                        "  {} [{}{}] {}",
-                        format_duration(progress.elapsed()),
-                        "█".repeat(filled),
-                        "░".repeat(empty),
-                        format_duration(progress.total()),
-                    )?;
-
-                    return Ok(());
-                }
-            }
-        }
-
-        // Fallback placeholder
         write!(
             stdout,
-            "  --:-- [{}] --:--",
-            "░".repeat(PROGRESS_BAR_WIDTH)
+            "  {} [{}{}] {}",
+            format_duration(progress.elapsed()),
+            "█".repeat(filled),
+            "░".repeat(empty),
+            format_duration(progress.total()),
         )?;
 
         Ok(())

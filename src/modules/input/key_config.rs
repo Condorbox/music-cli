@@ -88,7 +88,7 @@ impl KeyConfig {
             })
             .collect();
 
-        out.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+        out.sort_by_cached_key(|a| a.to_string());
         out.dedup();
         out
     }
