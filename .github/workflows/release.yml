@@ -88,7 +88,7 @@ jobs:
           path: plan-dist-manifest.json
 
   # Build and packages all the platform-specific things
-  A:
+  build-local-artifacts:
     name: build-local-artifacts (${{ join(matrix.targets, ', ') }})
     # Let the initial task tell us to not run (currently very blunt)
     needs:
