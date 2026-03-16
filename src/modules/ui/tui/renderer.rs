@@ -44,7 +44,7 @@ pub struct TuiRenderer {
     is_paused: bool,
     search_active: bool,
     search_query: String,
-    search_results: Vec<(usize, crate::core::models::Song)>,
+    search_results: Vec<usize>,
     shuffle: bool,
     is_scanning: bool,
     scan_progress: usize,
@@ -146,9 +146,11 @@ impl TuiRenderer {
             let items: Vec<ListItem> = self
                 .search_results
                 .iter()
-                .map(|(_original_idx, song)| {
-                    let is_current = current_path.is_some_and(|p| p == &song.path);
-                    song_list_item(None, song, is_current, content_width)
+                .filter_map(|&orig_idx| {
+                    self.songs.get(orig_idx).map(|song| {
+                        let is_current = current_path.is_some_and(|p| p == &song.path);
+                        song_list_item(None, song, is_current, content_width)
+                    })
                 })
                 .collect();
 
@@ -565,7 +567,7 @@ impl TuiRenderer {
 
     fn get_original_index(&self, display_idx: usize) -> Option<usize> {
         if self.search_active {
-            self.search_results.get(display_idx).map(|(orig_idx, _)| *orig_idx)
+            self.search_results.get(display_idx).copied()
         } else {
             Some(display_idx)
         }
@@ -648,7 +650,7 @@ impl UiRenderer for TuiRenderer {
             // Map to display index (search results or full list)
             if self.search_active && !self.search_results.is_empty() {
                 // Find position in search results
-                if let Some(pos) = self.search_results.iter().position(|(orig_idx, _)| *orig_idx == index) {
+                if let Some(pos) = self.search_results.iter().position(|&orig_idx| orig_idx == index) {
                     self.list_state.borrow_mut().select(Some(pos));
                 }
             } else {

@@ -69,7 +69,7 @@ pub enum LibraryEvent {
     SearchRequested { query: String },
 
     /// Search results
-    SearchResults { results: Vec<(usize, Song)> },
+    SearchResults { results: Vec<usize> },
 
     /// User requested a sort order change
     SortRequested { field: Option<SortField> },

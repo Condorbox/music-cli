@@ -91,7 +91,7 @@ pub struct UiState {
     // Search state
     pub search_active: bool,
     pub search_query: String,
-    pub search_results: Vec<(usize, Song)>, // (original_index, song)
+    pub search_results: Vec<usize>, // original_index
 }
 
 impl Default for UiState {
@@ -248,9 +248,7 @@ impl AppState {
                         self.ui.status_message = "No results found".to_string();
                     } else {
                         self.ui.status_message = format!("Found {} matches", results.len());
-                        if !results.is_empty() {
-                            self.ui.selected_index = Some(results[0].0);
-                        }
+                        self.ui.selected_index = results.first().copied();
                     }
                 }
                 LibraryEvent::SortChanged { field, new_selected_index, new_current_index } => {
@@ -676,7 +674,7 @@ mod tests {
     #[test]
     fn search_results_non_empty_auto_selects_first_and_updates_status() {
         let mut state = state_with_songs(5);
-        let results = vec![(3, make_song("Match")), (1, make_song("Other"))];
+        let results = vec![3usize, 1];
 
         apply(&mut state, AppEvent::Library(LibraryEvent::SearchResults { results }));
 
@@ -781,7 +779,7 @@ mod tests {
         let mut state = AppState::default();
         state.ui.search_active = true;
         state.ui.search_query = "pink".to_owned();
-        state.ui.search_results = vec![(0, make_song("Pink"))];
+        state.ui.search_results = vec![0];
 
         apply(&mut state, AppEvent::Ui(UiEvent::SearchToggled { active: false }));
 

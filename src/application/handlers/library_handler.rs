@@ -54,8 +54,12 @@ impl LibraryHandler {
             LibraryEvent::SearchRequested { query } => {
                 let results = {
                     let state = ctx.state.lock().unwrap();
-                    let raw = self.search_engine.search(&state.library.songs, query);
-                    self.search_engine.search_result_to_song_index(raw)
+                    self.search_engine
+                        .search(&state.library.songs, query)
+                        .into_iter()
+                        .map(|r| r.index)
+                        .collect()
+
                 };
 
                 ctx.event_tx
