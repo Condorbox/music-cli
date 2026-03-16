@@ -276,8 +276,8 @@ impl TuiRenderer {
             f.render_widget(Paragraph::new(text_content), chunks[0]);
 
             // Spotify-style Progress Bar (Bottom Chunk): [elapsed] [bar] [total]
-            if let Some(duration) = song.duration {
-                if let Some(progress) = PlaybackProgress::new(self.current_elapsed, duration) {
+            if let Some(duration) = song.duration
+                && let Some(progress) = PlaybackProgress::new(self.current_elapsed, duration) {
                     let elapsed_str = format_duration(progress.elapsed());
                     let total_str = format_duration(progress.total());
 
@@ -311,7 +311,6 @@ impl TuiRenderer {
                         .style(Style::default().fg(Color::Gray));
                     f.render_widget(total_widget, progress_chunks[4]);
                 }
-            }
         } else {
             f.render_widget(Paragraph::new(vec![Line::from("No song playing")]), chunks[0]);
         }

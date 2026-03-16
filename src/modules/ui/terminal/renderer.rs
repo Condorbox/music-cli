@@ -214,13 +214,11 @@ impl UiRenderer for TerminalRenderer {
             self.key_config_synced = true;
         }
 
-        if event::poll(Duration::from_millis(0))? {
-            if let Event::Key(key) = event::read()? {
-                if let Some(action) = map_key(InputMode::Normal, key, config) {
+        if event::poll(Duration::from_millis(0))?
+            && let Event::Key(key) = event::read()?
+                && let Some(action) = map_key(InputMode::Normal, key, config) {
                     self.apply_action(action, &mut events);
                 }
-            }
-        }
 
         Ok(events)
     }
