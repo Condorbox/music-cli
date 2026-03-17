@@ -3,6 +3,7 @@ use crate::application::state::AppState;
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::PathBuf;
+use crate::utils::APP_NAME;
 
 pub struct JsonStorageBackend {
     file_path: PathBuf,
@@ -11,7 +12,7 @@ pub struct JsonStorageBackend {
 impl JsonStorageBackend {
     pub fn new() -> Result<Self> {
         let mut path = dirs::config_dir().context("Could not find config directory")?;
-        path.push("music-cli");
+        path.push(&format!("{}", APP_NAME));
 
         fs::create_dir_all(&path)?;
 

@@ -1,6 +1,6 @@
 use crate::core::models::RepeatMode;
 
-pub const APP_NAME: &str = "music-cli";
+pub const APP_NAME: &str = "hextune";
 
 pub const SUPPORTED_EXTENSIONS: &[&str] = &["mp3", "flac", "wav", "ogg"];
 

@@ -1,11 +1,11 @@
 [package]
-name = "music-cli"
+name = "hextune"
 version = "1.0.0"
 edition = "2024"
 description = "Lightweight terminal music player"
 license = "MIT"
-repository = "https://github.com/Condorbox/music-cli"
-homepage = "https://github.com/Condorbox/music-cli"
+repository = "https://github.com/Condorbox/hextune"
+homepage = "https://github.com/Condorbox/hextune"
 readme = "README.md"
 keywords = ["music", "player", "cli", "tui", "terminal"]
 categories = ["command-line-utilities", "multimedia::audio"]

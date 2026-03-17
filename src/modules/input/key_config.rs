@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use crate::utils::APP_NAME;
 
 /// Resolved, lookup-ready keymap.
 ///
@@ -255,7 +256,7 @@ fn parse_key_list(value: &toml::Value) -> Result<Vec<String>, String> {
 }
 
 fn keymap_path(config_dir: &Path) -> PathBuf {
-    config_dir.join("music-cli").join("keymap.toml")
+    config_dir.join(&format!("{}", APP_NAME)).join("keymap.toml")
 }
 
 fn write_default_keymap_if_missing(file_path: &Path) -> io::Result<()> {
@@ -294,9 +295,9 @@ fn default_keymap_toml() -> String {
     }
 
     let mut out = String::new();
-    out.push_str("# music-cli keymap configuration\n");
+    out.push_str(&format!("# {} keymap configuration\n", APP_NAME));
     out.push_str("#\n");
-    out.push_str("# Generated automatically by music-cli (delete to regenerate).\n");
+    out.push_str(&format!("# Generated automatically by {} (delete to regenerate).\n", APP_NAME));
     out.push_str("# Edit this file to customise key bindings.\n");
     out.push_str("# Omitted entries fall back to compiled-in defaults.\n");
     out.push_str("# Multiple keys for the same action: use an array.\n");
@@ -463,7 +464,7 @@ mod tests {
     #[test]
     fn load_or_default_absent_file_returns_default() {
         let dir = std::env::temp_dir().join(format!(
-            "music_cli_keyconfig_absent_{}_{}",
+            "hextune_keyconfig_absent_{}_{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -489,14 +490,14 @@ mod tests {
     #[test]
     fn load_or_default_invalid_toml_returns_default() {
         let dir = std::env::temp_dir().join(format!(
-            "music_cli_keyconfig_invalid_{}_{}",
+            "hextune_keyconfig_invalid_{}_{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()
         ));
-        let app_dir = dir.join("music-cli");
+        let app_dir = dir.join("hextune");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&app_dir).unwrap();
         fs::write(app_dir.join("keymap.toml"), "this is not = toml").unwrap();

@@ -1,14 +1,14 @@
-# `music-cli`
+# `hextune`
 
 Lightweight terminal music player (CLI + interactive TUI).
 
-`music-cli` scans a folder on disk, builds a local library (stored as JSON in your OS config
+`hextune` scans a folder on disk, builds a local library (stored as JSON in your OS config
 directory), and lets you play music either via simple terminal playback or a full-screen
 browser UI.
 
 ## Features
 
-- Play a single audio file: `music-cli play <FILE>`
+- Play a single audio file: `hextune play <FILE>`
 - Local library scanning: set a root folder (`path`) and scan it (`refresh`)
 - Library playback: `playlist` (simple terminal UI with playback controls)
 - Full-screen interactive browser: `browse` (TUI)
@@ -19,48 +19,73 @@ browser UI.
 
 ## Install
 
-This is a Rust project. You can run it directly with Cargo, or build a release binary.
+### Pre-built binaries (recommended)
+
+**Linux & macOS:**
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Condorbox/hextune/releases/download/v1.0.0/hextune-installer.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/Condorbox/hextune/releases/download/v1.0.0/hextune-installer.ps1 | iex"
+```
+
+Or download the binary directly from the [latest release](https://github.com/Condorbox/hextune/releases/latest) for your platform:
+- `hextune-x86_64-unknown-linux-gnu.tar.gz` — Linux x86_64
+- `hextune-aarch64-unknown-linux-gnu.tar.gz` — Linux ARM64
+- `hextune-x86_64-apple-darwin.tar.gz` — macOS Intel
+- `hextune-aarch64-apple-darwin.tar.gz` — macOS Apple Silicon
+- `hextune-x86_64-pc-windows-msvc.zip` — Windows x86_64
+
+### From crates.io
+
+```bash
+cargo install hextune
+```
+
+### From source
 
 ```bash
 # Build a release binary
 cargo build --release
-./target/release/music-cli --help
+./target/release/hextune --help
 ```
 
-Optional: install locally from the repo:
+Or install locally from the repo:
 
 ```bash
 cargo install --path .
-music-cli --help
+hextune --help
 ```
 
 ## Quick start
 
-1) Point `music-cli` at your music folder:
+1) Point `hextune` at your music folder:
 
 ```bash
-music-cli path /path/to/your/music
+hextune path /path/to/your/music
 ```
 
 2) Scan it to build/update the library:
 
 ```bash
-music-cli refresh
+hextune refresh
 ```
 
 3) Start playback:
 
 ```bash
 # Full-screen interactive browser (recommended)
-music-cli browse
+hextune browse
 
 # Or: simple “play through the library” mode
-music-cli playlist
+hextune playlist
 ```
 
 ## Commands
 
-`music-cli --help` shows the full help text. These are the available subcommands:
+`hextune --help` shows the full help text. These are the available subcommands:
 
 - `play <FILE>`: play one audio file directly (does not use the library)
 - `path <DIR>`: set the root music directory
@@ -78,15 +103,15 @@ music-cli playlist
 ### Examples
 
 ```bash
-music-cli list
-music-cli search "pink floyd wall"
-music-cli select 42
+hextune list
+hextune search "pink floyd wall"
+hextune select 42
 
-music-cli volume 70
-music-cli shuffle true
-music-cli loop all
+hextune volume 70
+hextune shuffle true
+hextune loop all
 
-music-cli sort artist
+hextune sort artist
 ```
 
 ## `browse` (TUI) key bindings
@@ -125,11 +150,11 @@ music-cli sort artist
 ## Keymap configuration (`keymap.toml`)
 
 You can override the default TUI key bindings by editing:
+  
+- `<config dir>/hextune/keymap.toml`
 
-- `<config dir>/music-cli/keymap.toml`
-
-If the file is missing, `music-cli` creates it with the compiled-in defaults and uses
-those defaults. If the file exists but is invalid TOML, `music-cli` prints a warning to
+If the file is missing, `hextune` creates it with the compiled-in defaults and uses
+those defaults. If the file exists but is invalid TOML, `hextune` prints a warning to
 stderr and falls back to defaults.
 
 ### Format
@@ -193,14 +218,14 @@ Text entry is intentionally not configurable:
 
 ## Data storage
 
-`music-cli` stores its state (library + settings like volume/shuffle/repeat/path) in:
+`hextune` stores its state (library + settings like volume/shuffle/repeat/path) in:
 
-- `<config dir>/music-cli/db.json`
+- `<config dir>/hextune/db.json`
 
 The *config dir* is your OS config directory as reported by `dirs::config_dir()` (it differs
 across platforms).
 
-If the file becomes corrupted, `music-cli` will try to recover what it can; otherwise it
+If the file becomes corrupted, `hextune` will try to recover what it can; otherwise it
 backs it up as `db.json.bak` and starts with defaults.
 
 ## Supported audio files
@@ -221,6 +246,6 @@ cargo run -- --help
 
 ## Troubleshooting
 
-- “No music path set”: run `music-cli path <DIR>` (or set it in `browse` → Settings → Music path)
-- “Library is empty”: run `music-cli refresh`
-- `select` fails with “Invalid index …”: use `music-cli search <QUERY>` to find the correct **0-based** index
+- “No music path set”: run `hextune path <DIR>` (or set it in `browse` → Settings → Music path)
+- “Library is empty”: run `hextune refresh`
+- `select` fails with “Invalid index …”: use `hextune search <QUERY>` to find the correct **0-based** index

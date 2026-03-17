@@ -801,6 +801,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "hextune"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "crossbeam-channel",
+ "crossterm",
+ "dirs",
+ "fuzzy-matcher",
+ "lofty",
+ "rand 0.10.0",
+ "ratatui",
+ "rodio",
+ "serde",
+ "serde_json",
+ "toml",
+ "walkdir",
+]
+
+[[package]]
 name = "id-arena"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1087,26 +1107,6 @@ dependencies = [
  "log",
  "wasi",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "music-cli"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "clap",
- "crossbeam-channel",
- "crossterm",
- "dirs",
- "fuzzy-matcher",
- "lofty",
- "rand 0.10.0",
- "ratatui",
- "rodio",
- "serde",
- "serde_json",
- "toml",
- "walkdir",
 ]
 
 [[package]]
