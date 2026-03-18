@@ -249,3 +249,7 @@ cargo run -- --help
 - “No music path set”: run `hextune path <DIR>` (or set it in `browse` → Settings → Music path)
 - “Library is empty”: run `hextune refresh`
 - `select` fails with “Invalid index …”: use `hextune search <QUERY>` to find the correct **0-based** index
+
+
+## License
+This project is licensed under the MIT License. See the [LICENSE](https://github.com/Condorbox/hextune/blob/main/LICENSE) file for more details.
